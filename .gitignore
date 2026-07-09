@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Simulation Results
+graph/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
