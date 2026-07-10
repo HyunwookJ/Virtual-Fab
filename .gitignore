@@ -5,7 +5,7 @@ __pycache__/
 
 # Simulation & ML outputs (regenerable: run main.py / ml scripts)
 # - graph/run_XXX/  : per-run graphs, run_info.json, wafers.csv.gz
-# - graph/ml/       : decision boundary figures
+# - graph/ml/       : decision boundary figures, saved model (mlp_model.npz)
 # - graph/legacy_no_noise/ : archived pre-noise datasets
 # docs/ is NOT ignored on purpose - README images must be committed.
 graph/

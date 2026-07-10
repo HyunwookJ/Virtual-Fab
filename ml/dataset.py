@@ -44,6 +44,25 @@ def load_dataset(graph_dir="graph"):
     return X, y
 
 
+# Load one run's wafers as (X, y). Used when grading a single fresh
+# lot with a trained model (see ml/judge.py).
+def load_run(run_id, graph_dir="graph"):
+
+    path = f"{graph_dir}/{run_id}/wafers.csv.gz"
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"'{path}' not found. Run 'python3 main.py' to create runs."
+        )
+
+    df = pd.read_csv(path)
+
+    X = df[FEATURE_COLUMNS].to_numpy()
+    y = df[LABEL_COLUMN].astype(int).to_numpy()
+
+    return X, y
+
+
 # Split by RUN, not by wafer. Wafers from the same run share one
 # process condition; if they land in both train and test, the test
 # score partly measures memorization of already-seen conditions

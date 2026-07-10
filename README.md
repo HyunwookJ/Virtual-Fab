@@ -68,7 +68,8 @@ wafer_test/
 ├── ml/                         # 머신러닝 (numpy 밑바닥 구현)
 │   ├── dataset.py              # run 취합 로더, run 단위 train/test 분리
 │   ├── perceptron.py           # 단층 퍼셉트론 + pocket 알고리즘
-│   ├── mlp.py                  # MLP + 역전파 + threshold sweep
+│   ├── mlp.py                  # MLP + 역전파 + 가중 손실 + 모델 저장
+│   ├── judge.py                # 저장된 모델로 새 run 판정 (EDS 단계)
 │   └── visualize_boundary.py   # 결정 경계 vs 실제 스펙 박스 시각화
 └── graph/                      # 실행 결과물 (gitignore)
     └── run_XXX/                # run별 그래프, run_info.json, wafers.csv.gz
@@ -83,16 +84,27 @@ python3 main.py
 # 2) 쌓인 데이터 현황
 python3 ml/dataset.py
 
-# 3) 학습/평가
+# 3) 학습/평가 (mlp.py는 학습된 모델을 graph/ml/mlp_model.npz로 저장)
 python3 ml/perceptron.py
 python3 ml/mlp.py
 
-# 4) 결정 경계 그림 생성 (graph/ml/decision_boundary.png)
+# 4) 학습된 모델로 새 웨이퍼 lot 판정 (EDS 단계)
+python3 main.py                  # 새 run 생성 (예: run_011)
+python3 ml/judge.py run_011      # 저장된 모델이 판정, 규칙 정답과 비교
+python3 ml/judge.py run_011 0.9  # 컷오프를 올려 recall 우선 운영
+
+# 5) 결정 경계 그림 생성 (graph/ml/decision_boundary.png)
 python3 ml/visualize_boundary.py
 ```
 
+## 비용 비대칭 반영 (가중 손실)
+
+불량 유출(FN)이 양품 폐기(FP)보다 비싼 fab을 위해, 손실 함수에서 불량 샘플에
+가중치를 줍니다 (`MLP(fail_weight=5)`). 학습 자체가 불량에 신중해져서, 같은 컷오프
+0.5에서 불량 recall이 70% → 89%로 오릅니다 (precision을 내주는 의도된 트레이드오프).
+추론 시점의 컷오프까지 합쳐 운영점을 정하는 손잡이가 둘이 됩니다.
+
 ## 다음 계획
 
-- 은닉층 크기/학습률 튜닝, 클래스 불균형 대응 (가중 손실)
-- 파라미터 추가 (CD, 온도 등)로 특징 공간 확장
 - PyTorch 재구현과 numpy 구현 비교
+- 파라미터 추가 (CD, 온도 등)로 특징 공간 확장

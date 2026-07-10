@@ -1,7 +1,11 @@
+import os
+
 import numpy as np
 
 from dataset import load_train_test_by_run
 from perceptron import standardize, evaluate
+
+MODEL_PATH = "graph/ml/mlp_model.npz"
 
 
 def relu(z):
@@ -59,6 +63,34 @@ class MLP:
 
     def predict(self, X):
         return (self.predict_proba(X) >= 0.5).astype(int)
+
+    # Persist the trained model. mean/std (from standardization) are
+    # saved with the weights, because a new wafer must be scaled the
+    # exact same way the training data was, or the model sees garbage.
+    def save(self, path, mean, std):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        np.savez(
+            path,
+            W1=self.W1, b1=self.b1,
+            W2=self.W2, b2=np.array(self.b2),
+            fail_weight=np.array(self.fail_weight),
+            mean=mean, std=std
+        )
+
+    # Rebuild a model from a saved file. Returns (model, mean, std).
+    @classmethod
+    def load(cls, path):
+        data = np.load(path)
+        model = cls(
+            n_features=data["W1"].shape[0],
+            n_hidden=data["W1"].shape[1],
+            fail_weight=float(data["fail_weight"])
+        )
+        model.W1 = data["W1"]
+        model.b1 = data["b1"]
+        model.W2 = data["W2"]
+        model.b2 = float(data["b2"])
+        return model, data["mean"], data["std"]
 
     # Class-weighted binary cross-entropy: heavily punishes confident
     # mistakes, and counts fail-class mistakes fail_weight times more.
@@ -177,3 +209,8 @@ if __name__ == "__main__":
             f"   {cutoff:.1f}  |     {precision * 100:6.2f}%     |"
             f"   {recall * 100:6.2f}%    | {f1 * 100:6.2f}%"
         )
+
+    # save the weighted model so ml/judge.py can grade fresh runs
+    model.save(MODEL_PATH, mean, std)
+    print()
+    print(f"saved model -> {MODEL_PATH}")
