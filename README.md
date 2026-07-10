@@ -77,6 +77,16 @@ wafer_test/
 
 ## 실행
 
+### 한 방에 (데이터 생성 → 학습 → 판정)
+
+```bash
+python3 run_all.py                 # 10 run 생성 → MLP 학습·저장 → 새 lot 판정
+python3 run_all.py --runs 20       # 생성 run 수 조절
+python3 run_all.py --cutoff 0.9    # recall 우선 운영점으로 판정
+```
+
+### 단계별로
+
 ```bash
 # 1) 데이터 생성 - 돌릴 때마다 새로운 공정 조건으로 2만 장씩 축적
 python3 main.py
