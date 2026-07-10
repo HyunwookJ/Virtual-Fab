@@ -1,4 +1,4 @@
-# wafer_test
+# semiconductor-process-simulator
 
 반도체 웨이퍼 공정 시뮬레이터와, 그 데이터를 학습해 EDS처럼 양품/불량을 스스로
 판정하는 머신러닝 분류기. 시뮬레이터부터 퍼셉트론·MLP까지 전부 numpy로 밑바닥부터
@@ -53,7 +53,7 @@ MLP는 P(양품)를 출력하므로 판정 컷오프를 조절해 운영점을 �
 ## 구조
 
 ```
-wafer_test/
+semiconductor-process-simulator/
 ├── main.py                     # 시뮬레이션 엔트리포인트
 ├── simulation/                 # 가상 fab (데이터 생성)
 │   ├── config.py               # 공정 스펙, 샘플링 범위, 측정 노이즈
@@ -73,6 +73,14 @@ wafer_test/
 │   └── visualize_boundary.py   # 결정 경계 vs 실제 스펙 박스 시각화
 └── graph/                      # 실행 결과물 (gitignore)
     └── run_XXX/                # run별 그래프, run_info.json, wafers.csv.gz
+```
+
+## 설치
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
 ## 실행
