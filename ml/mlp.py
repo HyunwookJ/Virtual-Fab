@@ -1,6 +1,6 @@
 import numpy as np
 
-from dataset import load_dataset
+from dataset import load_train_test_by_run
 from perceptron import standardize, evaluate
 
 
@@ -102,28 +102,50 @@ class MLP:
 
 if __name__ == "__main__":
 
-    X, y = load_dataset()
-
-    # same shuffle/split/standardization as perceptron.py,
-    # so the two models are compared on identical data
-    rng = np.random.default_rng(42)
-    order = rng.permutation(len(X))
-    X, y = X[order], y[order]
-
-    split = int(len(X) * 0.8)
-    X_train, X_test = X[:split], X[split:]
-    y_train, y_test = y[:split], y[split:]
+    # same run-based split as perceptron.py, so the two models are
+    # compared on identical data
+    X_train, y_train, X_test, y_test, test_runs = load_train_test_by_run()
 
     X_train, mean, std = standardize(X_train)
     X_test, _, _ = standardize(X_test, mean, std)
 
     print(f"Train {len(X_train)} wafers / Test {len(X_test)} wafers")
-    print(f"Fail ratio : {(y == 0).mean() * 100:.2f}%")
+    print(f"Held-out test runs : {', '.join(test_runs)}")
+    print(f"Fail ratio (train) : {(y_train == 0).mean() * 100:.2f}%")
     print()
 
     model = MLP(n_features=X_train.shape[1])
     model.fit(X_train, y_train, epochs=30)
 
     print()
-    print("=== Test set evaluation ===")
+    print("=== Test set evaluation (cutoff 0.5) ===")
     evaluate(y_test, model.predict(X_test))
+
+    # The MLP outputs P(good), so the operating point is a choice:
+    # raising the cutoff catches more fails (recall) at the cost of
+    # rejecting more good wafers (precision). A fab picks this point
+    # from the cost of each error, not from accuracy.
+    print()
+    print("=== Threshold sweep - predict good when P(good) >= cutoff ===")
+    proba = model.predict_proba(X_test)
+    print(" cutoff | precision(fail) | recall(fail) |   F1")
+
+    for cutoff in (0.1, 0.3, 0.5, 0.7, 0.9):
+
+        pred = (proba >= cutoff).astype(int)
+
+        tp = ((y_test == 0) & (pred == 0)).sum()
+        fp = ((y_test == 1) & (pred == 0)).sum()
+        fn = ((y_test == 0) & (pred == 1)).sum()
+
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        f1 = (
+            2 * precision * recall / (precision + recall)
+            if precision + recall else 0.0
+        )
+
+        print(
+            f"   {cutoff:.1f}  |     {precision * 100:6.2f}%     |"
+            f"   {recall * 100:6.2f}%    | {f1 * 100:6.2f}%"
+        )

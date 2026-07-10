@@ -1,6 +1,7 @@
 import glob
 import os
 
+import numpy as np
 import pandas as pd
 
 FEATURE_COLUMNS = ["Vth[V]", "Oxide[nm]", "Leakage[nA]"]
@@ -41,6 +42,37 @@ def load_dataset(graph_dir="graph"):
     y = data[LABEL_COLUMN].astype(int).to_numpy()
 
     return X, y
+
+
+# Split by RUN, not by wafer. Wafers from the same run share one
+# process condition; if they land in both train and test, the test
+# score partly measures memorization of already-seen conditions
+# (data leakage). Holding out whole runs asks the question production
+# actually cares about: does the model generalize to process
+# conditions it has never seen?
+def load_train_test_by_run(test_fraction=0.2, graph_dir="graph", seed=42):
+
+    data = load_all_runs(graph_dir)
+
+    runs = sorted(data["Run"].unique())
+
+    rng = np.random.default_rng(seed)
+    rng.shuffle(runs)
+
+    n_test = max(1, round(len(runs) * test_fraction))
+    test_runs = sorted(runs[:n_test])
+
+    is_test = data["Run"].isin(test_runs)
+
+    train = data[~is_test]
+    test = data[is_test]
+
+    X_train = train[FEATURE_COLUMNS].to_numpy()
+    y_train = train[LABEL_COLUMN].astype(int).to_numpy()
+    X_test = test[FEATURE_COLUMNS].to_numpy()
+    y_test = test[LABEL_COLUMN].astype(int).to_numpy()
+
+    return X_train, y_train, X_test, y_test, test_runs
 
 
 if __name__ == "__main__":

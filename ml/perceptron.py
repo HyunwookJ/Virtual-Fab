@@ -1,6 +1,6 @@
 import numpy as np
 
-from dataset import load_dataset, FEATURE_COLUMNS
+from dataset import load_train_test_by_run, FEATURE_COLUMNS
 
 
 # Features have very different scales (Vth ~0.7, Oxide ~100, Leakage ~1-10),
@@ -133,22 +133,16 @@ def evaluate(y_true, y_pred):
 
 if __name__ == "__main__":
 
-    X, y = load_dataset()
-
-    # shuffle, then split 80% train / 20% test
-    rng = np.random.default_rng(42)
-    order = rng.permutation(len(X))
-    X, y = X[order], y[order]
-
-    split = int(len(X) * 0.8)
-    X_train, X_test = X[:split], X[split:]
-    y_train, y_test = y[:split], y[split:]
+    # whole runs are held out for testing, so the score measures
+    # generalization to unseen process conditions (no leakage)
+    X_train, y_train, X_test, y_test, test_runs = load_train_test_by_run()
 
     X_train, mean, std = standardize(X_train)
     X_test, _, _ = standardize(X_test, mean, std)
 
     print(f"Train {len(X_train)} wafers / Test {len(X_test)} wafers")
-    print(f"Fail ratio : {(y == 0).mean() * 100:.2f}%")
+    print(f"Held-out test runs : {', '.join(test_runs)}")
+    print(f"Fail ratio (train) : {(y_train == 0).mean() * 100:.2f}%")
     print()
 
     model = Perceptron(n_features=X_train.shape[1])

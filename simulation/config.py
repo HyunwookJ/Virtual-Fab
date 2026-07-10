@@ -25,6 +25,19 @@ PROCESS_CONFIG = {
 }
 
 
+# Measurement noise of the tester (the probe is not perfect).
+# Pass/fail (Result) is judged on the TRUE physical values, but the
+# dataset stores what the tester MEASURES: true value + sensor noise.
+# Near a spec boundary the measurement can no longer tell good from
+# bad, so no classifier can reach 100% - this is what makes the
+# problem realistic instead of "rediscovering a known rule".
+MEASUREMENT_NOISE = {
+    "Vth": 0.005,     # additive gaussian std [V]
+    "Oxide": 0.5,     # additive gaussian std [nm]
+    "Leakage": 0.10   # multiplicative lognormal sigma
+}
+
+
 # How each run's process condition is randomized.
 # Only the process center/spread (mean, std, sigma) drift run-to-run;
 # spec limits stay fixed because they are product requirements.
