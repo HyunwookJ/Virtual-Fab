@@ -24,7 +24,14 @@ def sigmoid(z):
 # is what buys the expressive power a single line cannot have.
 class MLP:
 
-    def __init__(self, n_features, n_hidden=16, learning_rate=0.1, seed=0):
+    # fail_weight scales how much a fail(0) sample counts in the loss.
+    # In a fab a shipped bad wafer (false negative) costs far more than
+    # a scrapped good one (false positive), yet fails are the minority,
+    # so an unweighted model drifts toward "call everything good".
+    # fail_weight > 1 bakes that cost asymmetry into training itself,
+    # rather than only patching it afterwards by moving the threshold.
+    def __init__(self, n_features, n_hidden=16, learning_rate=0.1,
+                 fail_weight=1.0, seed=0):
 
         rng = np.random.default_rng(seed)
 
@@ -35,6 +42,11 @@ class MLP:
         self.b2 = 0.0
 
         self.lr = learning_rate
+        self.fail_weight = fail_weight
+
+    # per-sample loss weight: fail_weight for fails, 1 for goods
+    def _weights(self, y):
+        return np.where(y == 0, self.fail_weight, 1.0)
 
     def forward(self, X):
         z1 = X @ self.W1 + self.b1     # hidden pre-activation
@@ -48,11 +60,14 @@ class MLP:
     def predict(self, X):
         return (self.predict_proba(X) >= 0.5).astype(int)
 
-    # Binary cross-entropy loss: heavily punishes confident mistakes.
+    # Class-weighted binary cross-entropy: heavily punishes confident
+    # mistakes, and counts fail-class mistakes fail_weight times more.
     def loss(self, X, y):
         p = self.predict_proba(X)
         eps = 1e-12
-        return -(y * np.log(p + eps) + (1 - y) * np.log(1 - p + eps)).mean()
+        w = self._weights(y)
+        return -(w * (y * np.log(p + eps)
+                      + (1 - y) * np.log(1 - p + eps))).mean()
 
     # Mini-batch gradient descent with backpropagation.
     # Unlike the perceptron's "shift on mistake" rule, every sample
@@ -76,8 +91,10 @@ class MLP:
 
                 z1, a1, p = self.forward(xb)
 
-                # output layer gradient (BCE + sigmoid simplifies to p - y)
-                dz2 = (p - yb).reshape(-1, 1)
+                # output layer gradient (BCE + sigmoid simplifies to p - y),
+                # scaled per-sample by the class weight
+                wb = self._weights(yb)
+                dz2 = (wb * (p - yb)).reshape(-1, 1)
                 dW2 = a1.T @ dz2 / m
                 db2 = dz2.mean()
 
@@ -114,19 +131,30 @@ if __name__ == "__main__":
     print(f"Fail ratio (train) : {(y_train == 0).mean() * 100:.2f}%")
     print()
 
-    model = MLP(n_features=X_train.shape[1])
-    model.fit(X_train, y_train, epochs=30)
-
+    # Baseline: unweighted loss (every wafer counts equally).
+    print("### Unweighted MLP (fail_weight = 1) ###")
+    baseline = MLP(n_features=X_train.shape[1], fail_weight=1.0)
+    baseline.fit(X_train, y_train, epochs=30)
     print()
-    print("=== Test set evaluation (cutoff 0.5) ===")
+    print("--- Test set evaluation (cutoff 0.5) ---")
+    evaluate(y_test, baseline.predict(X_test))
+
+    # Weighted loss: a missed fail costs 5x a rejected good, applied
+    # during training. Expect higher fail recall at the same cutoff.
+    print()
+    print("### Weighted MLP (fail_weight = 5) ###")
+    model = MLP(n_features=X_train.shape[1], fail_weight=5.0)
+    model.fit(X_train, y_train, epochs=30)
+    print()
+    print("--- Test set evaluation (cutoff 0.5) ---")
     evaluate(y_test, model.predict(X_test))
 
-    # The MLP outputs P(good), so the operating point is a choice:
-    # raising the cutoff catches more fails (recall) at the cost of
-    # rejecting more good wafers (precision). A fab picks this point
-    # from the cost of each error, not from accuracy.
+    # The MLP outputs P(good), so the operating point is also tunable
+    # after training: raising the cutoff catches more fails (recall) at
+    # the cost of rejecting more good wafers (precision). A fab picks
+    # this point from the cost of each error, not from accuracy.
     print()
-    print("=== Threshold sweep - predict good when P(good) >= cutoff ===")
+    print("=== Threshold sweep (weighted model) ===")
     proba = model.predict_proba(X_test)
     print(" cutoff | precision(fail) | recall(fail) |   F1")
 
