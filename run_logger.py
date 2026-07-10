@@ -6,12 +6,15 @@ def save_run_info(
     run_path,
     process_config,
     yield_data,
-    corr
+    corr,
+    seed=None
 ):
 
     info = {
-        
+
         "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+
+        "Seed": seed,
 
         "Process_Config": process_config,
 

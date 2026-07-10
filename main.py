@@ -6,11 +6,12 @@ from defect_analysis import extract_fail, analyze_Leakage_fail, analyze_Oxide_fa
 from visualization import show_vth_distribution, show_defect_pareto
 from run_logger import save_run_info
 from run_manage import setup_run
-from config import PROCESS_CONFIG
+from config import PROCESS_CONFIG, PARAM_RANGES
+from config_sampler import sample_config
 from correlation_analysis import show_oxide_leakage_scatter, show_oxide_vth_scatter, calculate_correlation
 
 
-def run_simulation(config):
+def run_simulation(config, seed=None):
 
     run_path, time = setup_run()
 
@@ -55,7 +56,8 @@ def run_simulation(config):
         run_path,
         config,
         check_yield,
-        corr
+        corr,
+        seed
     )
 
     show_oxide_leakage_scatter(wafer_data, run_path, time)
@@ -65,4 +67,5 @@ def run_simulation(config):
 
 
 if __name__ == "__main__":
-    run_simulation(PROCESS_CONFIG)
+    config, seed = sample_config(PROCESS_CONFIG, PARAM_RANGES)
+    run_simulation(config, seed)
