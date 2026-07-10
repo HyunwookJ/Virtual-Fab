@@ -35,3 +35,9 @@ def save_run_info(
 
     with open(f"{run_path}/run_info.json", "w") as file:
         json.dump(info, file, indent=4)
+
+
+# Save the per-wafer raw table (features + Result label) so that
+# runs accumulate into an ML training dataset. Compressed to save disk.
+def save_wafer_data(run_path, wafer_data):
+    wafer_data.to_csv(f"{run_path}/wafers.csv.gz", index=False)

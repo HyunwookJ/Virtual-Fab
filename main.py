@@ -4,7 +4,7 @@ from wafer_generate import make_random_condi
 from wafer_analysis import wafer_analysis
 from defect_analysis import extract_fail, analyze_Leakage_fail, analyze_Oxide_fail, analyze_Vth_fail
 from visualization import show_vth_distribution, show_defect_pareto
-from run_logger import save_run_info
+from run_logger import save_run_info, save_wafer_data
 from run_manage import setup_run
 from config import PROCESS_CONFIG, PARAM_RANGES
 from config_sampler import sample_config
@@ -59,6 +59,8 @@ def run_simulation(config, seed=None):
         corr,
         seed
     )
+
+    save_wafer_data(run_path, wafer_data)
 
     show_oxide_leakage_scatter(wafer_data, run_path, time)
     show_oxide_vth_scatter(wafer_data, run_path, time)

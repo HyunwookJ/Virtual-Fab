@@ -1,7 +1,7 @@
 # Before data processing, configuare the initial condition out.
 
 PROCESS_CONFIG = {
-    "num_wafer": 100000,
+    "num_wafer": 20000,
 
     "Vth": {
         "mean": 0.70,
