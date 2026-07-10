@@ -1,4 +1,4 @@
-from config import PROCESS_CONFIG
+from simulation.config import PROCESS_CONFIG
 
 def extract_fail(wafer_data):
     fail_wafer = wafer_data[wafer_data["Result"] == False]

@@ -1,4 +1,4 @@
-from config import PROCESS_CONFIG
+from simulation.config import PROCESS_CONFIG
 
 def wafer_analysis(wafer_data):
 
