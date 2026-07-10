@@ -1,8 +1,7 @@
 import matplotlib.pyplot as plt
-from run_manage import time, run_path
 
 
-def show_oxide_leakage_scatter(wafer_data):
+def show_oxide_leakage_scatter(wafer_data, run_path, time):
 
     plt.scatter(
         wafer_data["Oxide[nm]"],
@@ -17,7 +16,7 @@ def show_oxide_leakage_scatter(wafer_data):
     plt.savefig(f"{run_path}/corr/{time}_corr_Oxide_Leakage.png")
     plt.close()
 
-def show_oxide_vth_scatter(wafer_data):
+def show_oxide_vth_scatter(wafer_data, run_path, time):
 
     plt.scatter(
         wafer_data["Oxide[nm]"],

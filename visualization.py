@@ -1,10 +1,7 @@
 import matplotlib.pyplot as plt
-from run_manage import time, run_path
 
 
-
-
-def show_vth_distribution(wafer_data):
+def show_vth_distribution(wafer_data, run_path, time):
     plt.hist(
         wafer_data["Vth[V]"],
         bins=30
@@ -18,7 +15,7 @@ def show_vth_distribution(wafer_data):
     plt.savefig(f"{run_path}/distribution/{time}_Vth_distribution.png")
     plt.close()
 
-def show_defect_pareto(Vth_fail, Oxide_fail, Leakage_fail):
+def show_defect_pareto(Vth_fail, Oxide_fail, Leakage_fail, run_path, time):
 
     causes = [
         "Vth",
