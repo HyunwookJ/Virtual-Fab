@@ -1,0 +1,165 @@
+import numpy as np
+
+from dataset import load_dataset, FEATURE_COLUMNS
+
+
+# Features have very different scales (Vth ~0.7, Oxide ~100, Leakage ~1-10),
+# so standardize each to mean 0 / std 1 before training.
+# Test data must reuse the training set's mean/std.
+def standardize(X, mean=None, std=None):
+
+    if mean is None:
+        mean = X.mean(axis=0)
+        std = X.std(axis=0)
+
+    return (X - mean) / std, mean, std
+
+
+# Classic single-layer perceptron, implemented from scratch.
+#
+# Decision rule : predict good(1) if  w . x + b >= 0  else fail(0)
+# Learning rule : whenever a wafer is misclassified,
+#                   w <- w + lr * (y - y_pred) * x
+#                   b <- b + lr * (y - y_pred)
+# i.e. the linear boundary shifts toward every mistake it makes.
+class Perceptron:
+
+    def __init__(self, n_features, learning_rate=0.01, seed=0):
+        rng = np.random.default_rng(seed)
+        self.w = rng.normal(0, 0.01, n_features)
+        self.b = 0.0
+        self.lr = learning_rate
+
+    def predict(self, X):
+        return (X @ self.w + self.b >= 0).astype(int)
+
+    def fit(self, X, y, epochs=10):
+
+        rng = np.random.default_rng(0)
+
+        # --- Pocket algorithm ---
+        # On data that is NOT linearly separable, the perceptron never
+        # converges: every epoch it keeps hitting misclassified wafers,
+        # so the boundary keeps moving forever. That means the weights
+        # at the moment training happens to stop are arbitrary - if the
+        # last epoch ended in a bad oscillation, we ship a bad model.
+        #
+        # The pocket algorithm fixes this: while the normal perceptron
+        # updates run as usual, we keep a separate copy ("pocket") of
+        # the best weights seen so far. Whenever the current weights
+        # score a new best accuracy, we put them in the pocket. After
+        # training, the pocket - not the final weights - becomes the
+        # model. The result is "the best linear boundary found during
+        # training" instead of "wherever the boundary happened to be
+        # when we stopped".
+        # (Classic pocket checks after every single update; we check
+        # once per epoch, which is far cheaper and works just as well
+        # in practice.)
+        best_w = self.w.copy()
+        best_b = self.b
+        best_acc = (self.predict(X) == y).mean()
+
+        for epoch in range(1, epochs + 1):
+
+            # reshuffle every epoch so the boundary is not dragged
+            # along the same trajectory of mistakes each time
+            order = rng.permutation(len(X))
+
+            updates = 0
+
+            for i in order:
+
+                xi, yi = X[i], y[i]
+
+                pred = 1 if xi @ self.w + self.b >= 0 else 0
+                error = yi - pred
+
+                if error != 0:
+                    self.w += self.lr * error * xi
+                    self.b += self.lr * error
+                    updates += 1
+
+            acc = (self.predict(X) == y).mean()
+
+            if acc > best_acc:
+                best_w = self.w.copy()
+                best_b = self.b
+                best_acc = acc
+
+            print(
+                f"epoch {epoch:2d} | "
+                f"updates {updates:5d} | "
+                f"train accuracy {acc * 100:.2f}% | "
+                f"pocket best {best_acc * 100:.2f}%"
+            )
+
+        # ship the pocket, not the last oscillation
+        self.w = best_w
+        self.b = best_b
+
+
+# Accuracy alone is misleading here (predicting "all good" already
+# scores ~95%), so also report the confusion matrix and
+# precision/recall/F1 for the fail class - what EDS actually cares
+# about is catching bad wafers.
+def evaluate(y_true, y_pred):
+
+    tp = int(((y_true == 0) & (y_pred == 0)).sum())  # fail caught
+    fn = int(((y_true == 0) & (y_pred == 1)).sum())  # fail missed
+    fp = int(((y_true == 1) & (y_pred == 0)).sum())  # good rejected
+    tn = int(((y_true == 1) & (y_pred == 1)).sum())  # good passed
+
+    accuracy = (tp + tn) / len(y_true)
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if precision + recall else 0.0
+    )
+
+    print(f"Accuracy : {accuracy * 100:.2f}%")
+    print(f"(baseline 'all good' : {(y_true == 1).mean() * 100:.2f}%)")
+    print()
+    print("Confusion matrix (fail = positive)")
+    print(f"  fail caught   (TP) : {tp:6d}")
+    print(f"  fail missed   (FN) : {fn:6d}")
+    print(f"  good rejected (FP) : {fp:6d}")
+    print(f"  good passed   (TN) : {tn:6d}")
+    print()
+    print(f"Precision (fail) : {precision * 100:.2f}%")
+    print(f"Recall    (fail) : {recall * 100:.2f}%")
+    print(f"F1        (fail) : {f1 * 100:.2f}%")
+
+
+if __name__ == "__main__":
+
+    X, y = load_dataset()
+
+    # shuffle, then split 80% train / 20% test
+    rng = np.random.default_rng(42)
+    order = rng.permutation(len(X))
+    X, y = X[order], y[order]
+
+    split = int(len(X) * 0.8)
+    X_train, X_test = X[:split], X[split:]
+    y_train, y_test = y[:split], y[split:]
+
+    X_train, mean, std = standardize(X_train)
+    X_test, _, _ = standardize(X_test, mean, std)
+
+    print(f"Train {len(X_train)} wafers / Test {len(X_test)} wafers")
+    print(f"Fail ratio : {(y == 0).mean() * 100:.2f}%")
+    print()
+
+    model = Perceptron(n_features=X_train.shape[1])
+    model.fit(X_train, y_train, epochs=10)
+
+    print()
+    print("=== Test set evaluation ===")
+    evaluate(y_test, model.predict(X_test))
+
+    print()
+    print("Learned linear boundary:")
+    for name, w in zip(FEATURE_COLUMNS, model.w):
+        print(f"  w[{name}] = {w:+.4f}")
+    print(f"  b = {model.b:+.4f}")
