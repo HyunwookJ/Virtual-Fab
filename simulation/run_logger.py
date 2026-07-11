@@ -29,7 +29,16 @@ def save_run_info(
                 corr.loc["Oxide[nm]", "Leakage[nA]"],
 
             "Vth-Leakage":
-                corr.loc["Vth[V]", "Leakage[nA]"]
+                corr.loc["Vth[V]", "Leakage[nA]"],
+
+            "CD-Vth":
+                corr.loc["CD[nm]", "Vth[V]"],
+
+            "CD-Leakage":
+                corr.loc["CD[nm]", "Leakage[nA]"],
+
+            "Temp-Leakage":
+                corr.loc["Temp[C]", "Leakage[nA]"]
         }
     }
 

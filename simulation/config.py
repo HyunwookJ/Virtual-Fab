@@ -21,6 +21,20 @@ PROCESS_CONFIG = {
         "mean": 1.0,
         "sigma": 0.15,
         "spec_max": 10
+    },
+
+    "CD": {
+        "mean": 45,
+        "std": 0.6,
+        "spec_min": 43.5,
+        "spec_max": 46.5
+    },
+
+    "Temp": {
+        "mean": 25,
+        "std": 0.8,
+        "spec_min": 23,
+        "spec_max": 27
     }
 }
 
@@ -34,7 +48,9 @@ PROCESS_CONFIG = {
 MEASUREMENT_NOISE = {
     "Vth": 0.005,     # additive gaussian std [V]
     "Oxide": 0.5,     # additive gaussian std [nm]
-    "Leakage": 0.10   # multiplicative lognormal sigma
+    "Leakage": 0.10,  # multiplicative lognormal sigma
+    "CD": 0.3,        # additive gaussian std [nm]
+    "Temp": 0.4       # additive gaussian std [C]
 }
 
 
@@ -57,5 +73,15 @@ PARAM_RANGES = {
     "Leakage": {
         "mean":  (0.8, 1.3),
         "sigma": (0.10, 0.25)
+    },
+
+    "CD": {
+        "mean": (44.4, 45.6),
+        "std":  (0.5, 0.85)
+    },
+
+    "Temp": {
+        "mean": (24.3, 25.7),
+        "std":  (0.7, 1.1)
     }
 }

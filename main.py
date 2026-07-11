@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from simulation.wafer_generate import make_random_condi, add_measurement_noise
 from simulation.wafer_analysis import wafer_analysis
-from simulation.defect_analysis import extract_fail, analyze_Leakage_fail, analyze_Oxide_fail, analyze_Vth_fail
+from simulation.defect_analysis import extract_fail, analyze_Leakage_fail, analyze_Oxide_fail, analyze_Vth_fail, analyze_CD_fail, analyze_Temp_fail
 from simulation.visualization import show_vth_distribution, show_defect_pareto
 from simulation.run_logger import save_run_info, save_wafer_data
 from simulation.run_manage import setup_run
@@ -17,13 +17,15 @@ def run_simulation(config, seed=None):
 
     num_wafer = config["num_wafer"]
 
-    Vth, Oxide, Leakage = make_random_condi(config)
+    Vth, Oxide, Leakage, CD, Temp = make_random_condi(config)
 
     wafer_data = pd.DataFrame({
         "Wafer_ID" : range(1, num_wafer + 1),
         "Vth[V]" : Vth,
         "Oxide[nm]" : Oxide,
-        "Leakage[nA]" : Leakage
+        "Leakage[nA]" : Leakage,
+        "CD[nm]" : CD,
+        "Temp[C]" : Temp
     })
 
     print(wafer_data)
@@ -33,16 +35,20 @@ def run_simulation(config, seed=None):
     fail_Vth = analyze_Vth_fail(wafer_data)
     fail_Oxide = analyze_Oxide_fail(wafer_data)
     fail_Leakage = analyze_Leakage_fail(wafer_data)
+    fail_CD = analyze_CD_fail(wafer_data)
+    fail_Temp = analyze_Temp_fail(wafer_data)
 
     # Pass/fail was judged on the true values above; from here on the
     # dataset holds what the tester measures (true + sensor noise),
     # because that is all a real fab - or an ML model - ever sees.
-    Vth_m, Oxide_m, Leakage_m = add_measurement_noise(
-        Vth, Oxide, Leakage, MEASUREMENT_NOISE
+    Vth_m, Oxide_m, Leakage_m, CD_m, Temp_m = add_measurement_noise(
+        Vth, Oxide, Leakage, CD, Temp, MEASUREMENT_NOISE
     )
     wafer_data["Vth[V]"] = Vth_m
     wafer_data["Oxide[nm]"] = Oxide_m
     wafer_data["Leakage[nA]"] = Leakage_m
+    wafer_data["CD[nm]"] = CD_m
+    wafer_data["Temp[C]"] = Temp_m
 
     corr = calculate_correlation(wafer_data)
 
@@ -51,6 +57,8 @@ def run_simulation(config, seed=None):
     print("Vth error : ", fail_Vth)
     print("oxide error : ", fail_Oxide)
     print("leakage current error :", fail_Leakage)
+    print("CD error : ", fail_CD)
+    print("temperature error : ", fail_Temp)
 
     show_vth_distribution(wafer_data, run_path, time)
 
@@ -58,6 +66,8 @@ def run_simulation(config, seed=None):
         fail_Vth,
         fail_Oxide,
         fail_Leakage,
+        fail_CD,
+        fail_Temp,
         run_path,
         time
     )

@@ -37,7 +37,9 @@ def calculate_correlation(wafer_data):
         [
             "Vth[V]",
             "Oxide[nm]",
-            "Leakage[nA]"
+            "Leakage[nA]",
+            "CD[nm]",
+            "Temp[C]"
         ]
     ].corr()
 

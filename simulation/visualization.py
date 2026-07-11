@@ -15,18 +15,23 @@ def show_vth_distribution(wafer_data, run_path, time):
     plt.savefig(f"{run_path}/distribution/{time}_Vth_distribution.png")
     plt.close()
 
-def show_defect_pareto(Vth_fail, Oxide_fail, Leakage_fail, run_path, time):
+def show_defect_pareto(Vth_fail, Oxide_fail, Leakage_fail, CD_fail, Temp_fail,
+                       run_path, time):
 
     causes = [
         "Vth",
         "Oxide",
-        "Leakage"
+        "Leakage",
+        "CD",
+        "Temp"
     ]
 
     counts = [
         Vth_fail,
         Oxide_fail,
-        Leakage_fail
+        Leakage_fail,
+        CD_fail,
+        Temp_fail
     ]
 
     plt.bar(causes, counts)

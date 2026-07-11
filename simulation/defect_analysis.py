@@ -27,3 +27,19 @@ def analyze_Leakage_fail(wafer_data):
     )
 
     return fail.sum()
+
+def analyze_CD_fail(wafer_data):
+    fail = (
+        (wafer_data["CD[nm]"] < PROCESS_CONFIG["CD"]["spec_min"]) |
+        (wafer_data["CD[nm]"] > PROCESS_CONFIG["CD"]["spec_max"])
+    )
+
+    return fail.sum()
+
+def analyze_Temp_fail(wafer_data):
+    fail = (
+        (wafer_data["Temp[C]"] < PROCESS_CONFIG["Temp"]["spec_min"]) |
+        (wafer_data["Temp[C]"] > PROCESS_CONFIG["Temp"]["spec_max"])
+    )
+
+    return fail.sum()

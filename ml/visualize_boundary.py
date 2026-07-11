@@ -18,21 +18,24 @@ GOOD_COLOR = "#0072B2"
 FAIL_COLOR = "#E69F00"
 
 
-# Paint the model's verdict over a Vth-Oxide plane (Leakage held fixed
-# at a healthy value), then overlay the true spec box. If the model
-# really learned the rule, the painted "good" region should match the
-# box; a single perceptron can only paint a half-plane.
-def plot_decision_region(ax, model, mean, std, leakage_fixed, title):
+# Paint the model's verdict over a Vth-Oxide plane (every other feature
+# held fixed at a healthy value), then overlay the true spec box. If the
+# model really learned the rule, the painted "good" region should match
+# the box; a single perceptron can only paint a half-plane.
+#
+# background is the full feature vector (length n_features) the slice
+# sits at; columns 0/1 (Vth/Oxide) are swept, the rest stay at their
+# median so the 2-D picture stays interpretable however many features
+# the model actually uses.
+def plot_decision_region(ax, model, mean, std, background, title):
 
     vth = np.linspace(0.63, 0.77, 400)
     oxide = np.linspace(95, 105, 400)
     VV, OO = np.meshgrid(vth, oxide)
 
-    grid = np.column_stack([
-        VV.ravel(),
-        OO.ravel(),
-        np.full(VV.size, leakage_fixed)
-    ])
+    grid = np.tile(background, (VV.size, 1))
+    grid[:, 0] = VV.ravel()
+    grid[:, 1] = OO.ravel()
     grid_std = (grid - mean) / std
 
     region = model.predict(grid_std).reshape(VV.shape)
@@ -85,18 +88,22 @@ if __name__ == "__main__":
     X_train_std, mean, std = standardize(X_train)
     X_test_std, _, _ = standardize(X_test, mean, std)
 
+    n_features = X_train_std.shape[1]
+
     print("training single perceptron ...")
-    perceptron = Perceptron(n_features=3)
+    perceptron = Perceptron(n_features=n_features)
     perceptron.fit(X_train_std, y_train, epochs=10)
 
     print()
     print("training MLP ...")
-    mlp = MLP(n_features=3)
+    mlp = MLP(n_features=n_features)
     mlp.fit(X_train_std, y_train, epochs=30)
 
-    # slice the 3D feature space at a healthy leakage level,
-    # so the Vth-Oxide plane shows the spec box cleanly
-    leakage_fixed = float(np.median(X_train[:, 2]))
+    # slice the feature space at the median of every non-plotted feature
+    # (Leakage, CD, Temp, ...), so the Vth-Oxide plane shows the spec box
+    # cleanly. background holds the raw (un-standardized) medians.
+    background = np.median(X_train, axis=0)
+    leakage_fixed = float(background[2])
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5), sharey=True)
 
@@ -106,7 +113,7 @@ if __name__ == "__main__":
     ):
         acc = (model.predict(X_test_std) == y_test).mean()
         plot_decision_region(
-            ax, model, mean, std, leakage_fixed,
+            ax, model, mean, std, background,
             f"{name} - test accuracy {acc * 100:.2f}%"
         )
         scatter_test_wafers(ax, X_test, y_test)
@@ -116,7 +123,7 @@ if __name__ == "__main__":
 
     fig.suptitle(
         "Decision regions (shading = model verdict) "
-        f"at Leakage = {leakage_fixed:.2f} nA"
+        f"at Leakage = {leakage_fixed:.2f} nA, other features at median"
     )
 
     os.makedirs("graph/ml", exist_ok=True)

@@ -57,7 +57,8 @@ is gitignored — all of it is regenerable):
 - **Labels are true-value based; features are measured.** In `main.py`,
   `wafer_analysis()` computes `Result` (pass/fail) from the *true* physical values
   first; only afterward is sensor noise added and the feature columns
-  (`Vth[V]`, `Oxide[nm]`, `Leakage[nA]`) overwritten with the noisy measurements.
+  (`Vth[V]`, `Oxide[nm]`, `Leakage[nA]`, `CD[nm]`, `Temp[C]`) overwritten with the
+  noisy measurements.
   So the CSV holds noisy features but clean labels. This is deliberate: near a
   spec boundary the measurement can't determine pass/fail, making the problem
   genuinely probabilistic — no model can reach 100%. If you touch the ordering of

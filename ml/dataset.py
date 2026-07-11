@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 
-FEATURE_COLUMNS = ["Vth[V]", "Oxide[nm]", "Leakage[nA]"]
+FEATURE_COLUMNS = ["Vth[V]", "Oxide[nm]", "Leakage[nA]", "CD[nm]", "Temp[C]"]
 LABEL_COLUMN = "Result"
 
 
