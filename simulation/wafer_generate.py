@@ -1,7 +1,12 @@
 import numpy as np
 
-# for conditions of wafer
-def make_random_condi(config):
+from simulation.config import PHYSICS
+
+# for conditions of wafer.
+# physics selects which coupling constants the "world" obeys - the
+# digital twin uses the default PHYSICS, the real fab (sim2real
+# experiment) passes REAL_FAB_PHYSICS.
+def make_random_condi(config, physics=PHYSICS):
 
     num_wafer = config["num_wafer"]
 
@@ -34,7 +39,9 @@ def make_random_condi(config):
 
     # thicker oxide raises Vth; smaller CD (shorter channel) lowers it
     Vth = (
-        Base_Vth + 0.01 * (Oxide - 100) + 0.004 * (CD - 45)
+        Base_Vth
+        + physics["vth_oxide"] * (Oxide - 100)
+        + physics["vth_cd"] * (CD - 45)
     )
 
 
@@ -47,9 +54,9 @@ def make_random_condi(config):
     # thinner oxide, smaller CD, and higher temperature all leak more
     Leakage = (
         Base_Leakage
-        * np.exp(-0.3 * (Oxide - 100))
-        * np.exp(-0.05 * (CD - 45))
-        * np.exp(0.03 * (Temp - 25))
+        * np.exp(physics["leak_oxide"] * (Oxide - 100))
+        * np.exp(physics["leak_cd"] * (CD - 45))
+        * np.exp(physics["leak_temp"] * (Temp - 25))
     )
 
     return Vth, Oxide, Leakage, CD, Temp

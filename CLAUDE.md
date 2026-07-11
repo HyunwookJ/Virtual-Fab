@@ -28,10 +28,16 @@ python3 run_all.py --runs 20         # change how many runs are generated
 python3 run_all.py --cutoff 0.9      # recall-first operating point when judging
 
 python3 main.py                      # generate ONE run (new run_XXX folder), append to dataset
+python3 main.py --real               # generate a "real fab" run (shifted physics + noisier testers)
+                                     # -> graph/real/run_XXX, used only by ml/sim2real.py
+python3 ml/sim2real.py               # synthetic-pretrain vs real-budget experiment -> graph/ml/sim2real.png
 python3 ml/dataset.py                # print current dataset status (runs / wafers / good / fail)
 python3 ml/perceptron.py             # train + eval single-layer perceptron (pocket)
 python3 ml/mlp.py                    # train + eval MLP, saves model to graph/ml/mlp_model.npz
 python3 ml/mlp.py --hidden 32 16 --l2 1e-4 --epochs 50   # deeper net / hyperparams via CLI
+python3 ml/mlp.py --margins          # train on derived margin features (flag saved into the model;
+                                     # judge.py reads it and applies the same transform automatically)
+python3 ml/perceptron.py --margins   # margin features rescue the perceptron (see ml/features.py)
 python3 ml/judge.py run_011          # judge one run with the saved model (cutoff 0.5)
 python3 ml/judge.py run_011 0.9      # judge with a custom cutoff
 python3 ml/visualize_boundary.py     # decision-boundary figure -> graph/ml/decision_boundary.png
@@ -84,3 +90,15 @@ single-layer perceptron structurally can't solve it and the MLP can.
 The feature/label column names are contracts between the two stages, defined once
 as `FEATURE_COLUMNS` / `LABEL_COLUMN` in `ml/dataset.py` and matching the columns
 written by the simulation. Changing a column name means changing both sides.
+
+The sim2real experiment (`ml/sim2real.py`) treats the default simulator as a
+digital twin and a second world — `REAL_FAB_PHYSICS` / `REAL_FAB_NOISE` in
+`simulation/config.py`, generated via `main.py --real` into `graph/real/run_*` —
+as the real fab. Physical coupling constants live in `PHYSICS` (config.py) and are
+injected into `make_random_condi`; spec limits are shared between both worlds.
+
+Derived margin features (`ml/features.py`, opt-in via `--margins`) are computed at
+train/judge time from the measured columns plus spec limits — never stored in the
+CSV. Whether a saved model expects them is persisted as `use_margins` inside
+`mlp_model.npz`; `judge.py` reads that flag and applies the identical transform,
+so the CSV contract stays five raw columns regardless.

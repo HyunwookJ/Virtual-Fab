@@ -39,6 +39,41 @@ PROCESS_CONFIG = {
 }
 
 
+# Physical couplings used by wafer_generate.py: how strongly one true
+# quantity drags another. These ARE the simulator's physics.
+PHYSICS = {
+    "vth_oxide": 0.01,    # dVth per nm of oxide above 100
+    "vth_cd": 0.004,      # dVth per nm of CD above 45
+    "leak_oxide": -0.3,   # log-leakage slope vs oxide
+    "leak_cd": -0.05,     # log-leakage slope vs CD
+    "leak_temp": 0.03     # log-leakage slope vs temperature
+}
+
+
+# --- The "real fab" (sim2real experiment) ---------------------------
+# Our simulator above plays the role of a DIGITAL TWIN: a physics model
+# someone built from theory. The real fab obeys physics the twin gets
+# slightly wrong (stronger couplings) and its testers are noisier.
+# Neither is ever visible to the twin - that mismatch is the sim2real
+# gap that ml/sim2real.py measures. Spec limits stay identical: they
+# are product requirements, not physics.
+REAL_FAB_PHYSICS = {
+    "vth_oxide": 0.013,
+    "vth_cd": 0.006,
+    "leak_oxide": -0.36,
+    "leak_cd": -0.03,
+    "leak_temp": 0.05
+}
+
+REAL_FAB_NOISE = {
+    "Vth": 0.007,
+    "Oxide": 0.7,
+    "Leakage": 0.14,
+    "CD": 0.42,
+    "Temp": 0.3
+}
+
+
 # Measurement noise of the tester (the probe is not perfect).
 # Pass/fail (Result) is judged on the TRUE physical values, but the
 # dataset stores what the tester MEASURES: true value + sensor noise.
