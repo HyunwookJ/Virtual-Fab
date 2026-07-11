@@ -113,9 +113,28 @@ class Perceptron:
 
 if __name__ == "__main__":
 
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Train the from-scratch single-layer perceptron"
+    )
+    parser.add_argument("--margins", action="store_true",
+                        help="append distance-to-spec-edge features "
+                             "(see ml/features.py)")
+    args = parser.parse_args()
+
     # whole runs are held out for testing, so the score measures
     # generalization to unseen process conditions (no leakage)
     X_train, y_train, X_test, y_test, test_runs = load_train_test_by_run()
+
+    feature_names = list(FEATURE_COLUMNS)
+    if args.margins:
+        from features import add_margin_features, EXTENDED_COLUMNS
+        X_train = add_margin_features(X_train)
+        X_test = add_margin_features(X_test)
+        feature_names = list(EXTENDED_COLUMNS)
+        print("Using derived margin features "
+              f"({len(feature_names)} features total)")
 
     X_train, mean, std = standardize(X_train)
     X_test, _, _ = standardize(X_test, mean, std)
@@ -134,6 +153,6 @@ if __name__ == "__main__":
 
     print()
     print("Learned linear boundary:")
-    for name, w in zip(FEATURE_COLUMNS, model.w):
+    for name, w in zip(feature_names, model.w):
         print(f"  w[{name}] = {w:+.4f}")
     print(f"  b = {model.b:+.4f}")

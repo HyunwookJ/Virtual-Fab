@@ -24,16 +24,24 @@ def judge_run(run_id, cutoff=0.5):
             "Train one first: python3 ml/mlp.py"
         )
 
-    model, mean, std = MLP.load(MODEL_PATH)
+    model, mean, std, use_margins = MLP.load(MODEL_PATH)
 
     X, y = load_run(run_id)
+
+    # the model must see wafers through the exact pipeline it was
+    # trained on: same derived features, same scaling
+    if use_margins:
+        from features import add_margin_features
+        X = add_margin_features(X)
+
     X_std, _, _ = standardize(X, mean, std)
 
     proba = model.predict_proba(X_std)          # P(good)
     pred = (proba >= cutoff).astype(int)
 
     print(f"=== Judging {run_id} ===")
-    print(f"model       : {MODEL_PATH} (fail_weight={model.fail_weight:g})")
+    print(f"model       : {MODEL_PATH} (fail_weight={model.fail_weight:g}"
+          f"{', margin features' if use_margins else ''})")
     print(f"wafers      : {len(y)}")
     print(f"cutoff      : P(good) >= {cutoff}")
     print()

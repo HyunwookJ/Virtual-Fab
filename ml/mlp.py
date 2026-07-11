@@ -87,8 +87,10 @@ class MLP:
     # Persist the trained model. Weights of every layer plus mean/std
     # (from standardization) are saved, because a new wafer must be
     # scaled the exact same way the training data was, or the model
-    # sees garbage.
-    def save(self, path, mean, std):
+    # sees garbage. use_margins records whether the model was trained
+    # on derived margin features, so judge.py can apply the identical
+    # transform to fresh wafers.
+    def save(self, path, mean, std, use_margins=False):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         layers = {f"W{i}": W for i, W in enumerate(self.W)}
         layers.update({f"b{i}": b for i, b in enumerate(self.b)})
@@ -98,11 +100,13 @@ class MLP:
             hidden=np.array(self.hidden),
             fail_weight=np.array(self.fail_weight),
             l2=np.array(self.l2),
+            use_margins=np.array(use_margins),
             mean=mean, std=std,
             **layers
         )
 
-    # Rebuild a model from a saved file. Returns (model, mean, std).
+    # Rebuild a model from a saved file.
+    # Returns (model, mean, std, use_margins).
     @classmethod
     def load(cls, path):
         data = np.load(path)
@@ -115,7 +119,8 @@ class MLP:
         )
         model.W = [data[f"W{i}"] for i in range(n_layers)]
         model.b = [data[f"b{i}"] for i in range(n_layers)]
-        return model, data["mean"], data["std"]
+        use_margins = bool(data["use_margins"]) if "use_margins" in data else False
+        return model, data["mean"], data["std"], use_margins
 
     # Class-weighted binary cross-entropy (plus optional L2). Heavily
     # punishes confident mistakes, and counts fail-class mistakes
@@ -230,11 +235,21 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no-baseline", action="store_true",
                         help="skip the unweighted baseline comparison")
+    parser.add_argument("--margins", action="store_true",
+                        help="append distance-to-spec-edge features "
+                             "(see ml/features.py)")
     args = parser.parse_args()
 
     # same run-based split as perceptron.py, so the two models are
     # compared on identical data
     X_train, y_train, X_test, y_test, test_runs = load_train_test_by_run()
+
+    if args.margins:
+        from features import add_margin_features
+        X_train = add_margin_features(X_train)
+        X_test = add_margin_features(X_test)
+        print(f"Using derived margin features "
+              f"({X_train.shape[1]} features total)")
 
     X_train, mean, std = standardize(X_train)
     X_test, _, _ = standardize(X_test, mean, std)
@@ -271,6 +286,6 @@ if __name__ == "__main__":
               f"   {m['recall'] * 100:6.2f}%    | {m['f1'] * 100:6.2f}%")
 
     # save the weighted model so ml/judge.py can grade fresh runs
-    model.save(MODEL_PATH, mean, std)
+    model.save(MODEL_PATH, mean, std, use_margins=args.margins)
     print()
     print(f"saved model -> {MODEL_PATH}")
