@@ -31,9 +31,11 @@ python3 main.py                      # generate ONE run (new run_XXX folder), ap
 python3 ml/dataset.py                # print current dataset status (runs / wafers / good / fail)
 python3 ml/perceptron.py             # train + eval single-layer perceptron (pocket)
 python3 ml/mlp.py                    # train + eval MLP, saves model to graph/ml/mlp_model.npz
+python3 ml/mlp.py --hidden 32 16 --l2 1e-4 --epochs 50   # deeper net / hyperparams via CLI
 python3 ml/judge.py run_011          # judge one run with the saved model (cutoff 0.5)
 python3 ml/judge.py run_011 0.9      # judge with a custom cutoff
 python3 ml/visualize_boundary.py     # decision-boundary figure -> graph/ml/decision_boundary.png
+python3 ml/visualize_metrics.py      # ROC/PR/training-curve/confusion -> graph/ml/model_evaluation.png
 ```
 
 There is no test suite, linter, or build step. Verification is done by running the

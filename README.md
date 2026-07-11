@@ -53,6 +53,24 @@ MLP는 P(양품)를 출력하므로 판정 컷오프를 조절해 운영점을 �
 | 0.5 | 55.22% | 85.44% | 67.08% |
 | 0.9 | 33.67% | **98.11%** | 50.13% |
 
+## 전체 운영점 비교 (ROC · PR)
+
+컷오프 몇 개가 아니라 **모든 임계값**에서의 판별력을 보려면 ROC·PR 곡선을 봅니다
+(`python3 ml/visualize_metrics.py`). 퍼셉트론은 확률이 없으므로 경계까지의 부호
+거리를 점수로 씁니다.
+
+![model evaluation](docs/model_evaluation.png)
+
+| 지표 | 단층 퍼셉트론 | MLP |
+|---|---|---|
+| ROC AUC | 0.386 | **0.925** |
+| PR AP (불량) | 0.187 | **0.774** |
+
+퍼셉트론의 ROC AUC가 **0.5(무작위)보다도 낮습니다**. 불량이 5차원 박스의 모든
+면에 흩어져 있어, 하나의 선형 점수로는 불량의 순위조차 매길 수 없기 때문입니다
+(한쪽 끝을 불량으로 몰면 반대쪽 끝의 불량을 놓칩니다). 오른쪽 아래 학습 곡선은
+train 손실과 test 손실을 함께 그려, 과적합 여부를 눈으로 확인할 수 있게 합니다.
+
 ## 구조
 
 ```
@@ -71,9 +89,11 @@ semiconductor-process-simulator/
 ├── ml/                         # 머신러닝 (numpy 밑바닥 구현)
 │   ├── dataset.py              # run 취합 로더, run 단위 train/test 분리
 │   ├── perceptron.py           # 단층 퍼셉트론 + pocket 알고리즘
-│   ├── mlp.py                  # MLP + 역전파 + 가중 손실 + 모델 저장
+│   ├── mlp.py                  # 다층 MLP + 역전파 + 가중 손실 + L2 + CLI
+│   ├── metrics.py              # 공용 지표 (혼동행렬/PRF1, ROC·PR 곡선)
 │   ├── judge.py                # 저장된 모델로 새 run 판정 (EDS 단계)
-│   └── visualize_boundary.py   # 결정 경계 vs 실제 스펙 박스 시각화
+│   ├── visualize_boundary.py   # 결정 경계 vs 실제 스펙 박스 시각화
+│   └── visualize_metrics.py    # ROC·PR·학습곡선·혼동행렬 시각화
 └── graph/                      # 실행 결과물 (gitignore)
     └── run_XXX/                # run별 그래프, run_info.json, wafers.csv.gz
 ```
@@ -128,5 +148,5 @@ python3 ml/visualize_boundary.py
 ## 다음 계획
 
 - PyTorch 재구현과 numpy 구현 비교
-- ROC/PR 곡선·혼동행렬 등 평가 지표 시각화
-- 은닉층 추가/하이퍼파라미터 튜닝으로 MLP 성능 개선
+- 파생 특징(스펙 경계까지 거리, 교호작용)으로 표현력 확장
+- seed 다중 학습으로 지표 분산(신뢰구간) 리포트

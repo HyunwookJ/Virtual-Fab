@@ -1,6 +1,7 @@
 import numpy as np
 
 from dataset import load_train_test_by_run, FEATURE_COLUMNS
+from metrics import print_evaluation as evaluate
 
 
 # Features have very different scales (Vth ~0.7, Oxide ~100, Leakage ~1-10),
@@ -30,8 +31,13 @@ class Perceptron:
         self.b = 0.0
         self.lr = learning_rate
 
+    # signed distance to the boundary; higher = more "good". Used as a
+    # ranking score for ROC/PR (the perceptron has no probability).
+    def decision_function(self, X):
+        return X @ self.w + self.b
+
     def predict(self, X):
-        return (X @ self.w + self.b >= 0).astype(int)
+        return (self.decision_function(X) >= 0).astype(int)
 
     def fit(self, X, y, epochs=10):
 
@@ -99,36 +105,10 @@ class Perceptron:
 
 
 # Accuracy alone is misleading here (predicting "all good" already
-# scores ~95%), so also report the confusion matrix and
-# precision/recall/F1 for the fail class - what EDS actually cares
-# about is catching bad wafers.
-def evaluate(y_true, y_pred):
-
-    tp = int(((y_true == 0) & (y_pred == 0)).sum())  # fail caught
-    fn = int(((y_true == 0) & (y_pred == 1)).sum())  # fail missed
-    fp = int(((y_true == 1) & (y_pred == 0)).sum())  # good rejected
-    tn = int(((y_true == 1) & (y_pred == 1)).sum())  # good passed
-
-    accuracy = (tp + tn) / len(y_true)
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
-    f1 = (
-        2 * precision * recall / (precision + recall)
-        if precision + recall else 0.0
-    )
-
-    print(f"Accuracy : {accuracy * 100:.2f}%")
-    print(f"(baseline 'all good' : {(y_true == 1).mean() * 100:.2f}%)")
-    print()
-    print("Confusion matrix (fail = positive)")
-    print(f"  fail caught   (TP) : {tp:6d}")
-    print(f"  fail missed   (FN) : {fn:6d}")
-    print(f"  good rejected (FP) : {fp:6d}")
-    print(f"  good passed   (TN) : {tn:6d}")
-    print()
-    print(f"Precision (fail) : {precision * 100:.2f}%")
-    print(f"Recall    (fail) : {recall * 100:.2f}%")
-    print(f"F1        (fail) : {f1 * 100:.2f}%")
+# scores high on this imbalanced data), so evaluation also reports the
+# confusion matrix and precision/recall/F1 for the fail class - what EDS
+# actually cares about is catching bad wafers. The shared implementation
+# lives in metrics.py; `evaluate` is imported above as print_evaluation.
 
 
 if __name__ == "__main__":
