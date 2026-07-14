@@ -1,241 +1,169 @@
-# 가상 공정 데이터를 이용한 웨이퍼 양불 판정 모델 학습
+# Virtual Fab — Learning a Wafer Pass/Fail Classifier from Simulated Process Data
 
-반도체 웨이퍼 공정 시뮬레이터를 구축하고, 그로부터 생성한 데이터로 EDS 단계의
-양품/불량 판정 모델을 학습시킨 실험 기록이다. 시뮬레이터와 분류기(퍼셉트론,
-MLP, 역전파)는 외부 ML 프레임워크 없이 전부 numpy로 직접 구현하였다.
+*Can cheap synthetic wafer data replace expensive real wafers for training an EDS pass/fail classifier?*
 
-## 1. 서론
+A record of an experiment in which a semiconductor wafer-process simulator is built, and the data it generates are used to train a good/fail classifier for the EDS test step. The simulator and the classifiers (perceptron, MLP, backpropagation) are implemented entirely in numpy, without any external ML framework.
 
-실제 fab에서 라벨된 학습 데이터를 확보하는 일은 비용 문제에 부딪힌다. 웨이퍼
-한 장의 단가가 높고, 데이터 한 줄을 얻으려면 수십 단계의 공정과 측정을 실제로
-통과시켜야 하며, 특히 학습에 필요한 불량 샘플은 수율이 높을수록 희귀해진다.
-공정 조건을 바꿔가며 데이터를 모으는 일은 장수를 늘리는 것보다 더 비싸다.
+> 한국어 원문은 [`README.ko.md`](README.ko.md)에 있다.
 
-본 프로젝트는 이에 대한 대안으로, 공정 물리를 근사한 시뮬레이터(디지털 트윈)로
-데이터를 저비용 대량 생성하여 판정 모델을 학습시키는 접근이 성립하는지를
-검증한다. 구체적인 질문은 다음 세 가지다.
+## 1. Introduction
 
-1. 시뮬레이션 데이터로 양불 판정을 학습하는 것이 가능한가, 그리고 문제의
-   구조상 어떤 모델 용량이 필요한가. (2–4.3절)
-2. 시뮬레이터의 물리가 현실과 어긋나 있어도 그 데이터는 여전히 유효한가. (4.4절)
-3. 유효하다면 실데이터를 어느 정도까지 대체할 수 있는가. (4.4절)
+Obtaining labeled training data in a real fab runs into a cost problem. The unit cost of a single wafer is high, producing one row of data requires physically passing a wafer through dozens of process and measurement steps, and the fail samples that training needs become rarer the higher the yield. Collecting data across varying process conditions is even more expensive than simply increasing the wafer count.
 
-## 2. 시뮬레이터 설계
+As an alternative, this project examines whether it is viable to train a classifier on data mass-produced at low cost by a simulator (a digital twin) that approximates the process physics. Three concrete questions are posed.
 
-### 2.1 데이터 생성
+1. Is it possible to learn pass/fail judgment from simulated data, and what model capacity does the structure of the problem require? (Sections 2–4.3)
+2. Do the data remain useful even when the simulator's physics is mismatched with reality? (Section 4.4)
+3. If so, to what extent can they replace real data? (Section 4.4)
 
-시뮬레이터는 실행마다 하나의 run(웨이퍼 20,000장)을 생성한다. 공정 파라미터는
-5개 — 문턱전압 Vth[V], 산화막 두께 Oxide[nm], 누설전류 Leakage[nA], 게이트
-선폭 CD[nm], 공정 온도 Temp[C] — 이며, run마다 각 파라미터의 중심과 산포가
-정해진 범위(`simulation/config.py`의 `PARAM_RANGES`) 안에서 무작위로
-샘플링되어 run 간 공정 변동을 재현한다.
+## 2. Simulator Design
 
-파라미터 간에는 물리적 상관을 부여하였다. 산화막이 두꺼울수록 Vth가 오르고
-누설이 줄며, CD가 작을수록(short channel) Vth가 내려가고 누설이 늘며, 온도가
-높을수록 누설이 지수적으로 증가한다. 결합 계수는 `PHYSICS`에 정의되어 있다.
+### 2.1 Data generation
 
-### 2.2 라벨과 측정값의 분리
+Each run of the simulator generates one run of 20,000 wafers. There are five process parameters — threshold voltage Vth[V], oxide thickness Oxide[nm], leakage current Leakage[nA], gate critical dimension CD[nm], and process temperature Temp[C] — and for each run the center and spread of every parameter are randomly sampled within fixed ranges (`PARAM_RANGES` in `simulation/config.py`), reproducing run-to-run process variation.
 
-양불 판정(Result)은 각 파라미터의 참값이 스펙 구간을 모두 만족하는지(5차원
-스펙 박스의 AND)로 결정된다. 그러나 데이터셋에 저장되는 특징값은 참값이 아니라
-측정값, 즉 참값에 센서 노이즈를 더한 값이다. 실제 fab에서도 테스터가 보고하는
-것은 측정값뿐이기 때문이다.
+Physical correlations are imposed among the parameters. A thicker oxide raises Vth and reduces leakage; a smaller CD (short channel) lowers Vth and increases leakage; and a higher temperature increases leakage exponentially. The coupling coefficients are defined in `PHYSICS`.
 
-이 설계로 인해 스펙 경계 근처의 웨이퍼는 측정만으로 양불을 확정할 수 없게 되고,
-문제는 어떤 모델도 정확도 100%에 도달할 수 없는 본질적으로 확률적인 분류
-문제가 된다. 라벨을 참값으로 먼저 판정한 뒤 노이즈를 얹는 순서(`main.py`)가
-이 성질을 보장한다.
+### 2.2 Separating labels from measurements
 
-### 2.3 평가 프로토콜
+The pass/fail label (Result) is decided by whether every parameter's *true* value satisfies its spec interval (an AND over a five-dimensional spec box). The feature values stored in the dataset, however, are not the true values but the measured values — the true values plus sensor noise — because a measured value is all a real fab's tester ever reports.
 
-train/test 분리는 웨이퍼 단위가 아니라 run 단위로 수행한다. 한 run의 웨이퍼는
-모두 같은 공정 조건을 공유하므로, 웨이퍼 단위로 나누면 공정 조건이 테스트
-셋에 누설된다. run 단위 분리는 학습 때 본 적 없는 공정 조건에 대한 일반화
-성능을 측정하는 것에 해당한다.
+This design makes wafers near a spec boundary impossible to classify from measurement alone, turning the task into an inherently probabilistic classification problem in which no model can reach 100% accuracy. The ordering in `main.py` — label from the true values first, then add noise — guarantees this property.
 
-## 3. 분류 모델
+### 2.3 Evaluation protocol
 
-두 모델을 numpy로 구현하여 비교하였다.
+The train/test split is done by run, not by wafer. All wafers in a run share the same process condition, so splitting by wafer would leak the process condition into the test set. Splitting by run corresponds to measuring generalization to process conditions never seen during training.
 
-단층 퍼셉트론은 pocket 알고리즘으로 학습한다. 양품 영역이 구간의 AND(박스)인
-반면 퍼셉트론은 초평면 하나만 그을 수 있으므로, 이 문제를 원리적으로 풀 수
-없을 것으로 예상된다. 실제로 학습 중 오분류 수정 횟수가 끝까지 감소하지 않는
-비수렴이 관찰된다.
+## 3. Classification Models
 
-MLP는 은닉층(기본 16 뉴런, CLI로 다층 구성 가능)과 sigmoid 출력으로 P(양품)를
-추정하며, 역전파, He 초기화, L2 정칙화를 포함한다. 불량 유출(FN)이 양품
-폐기(FP)보다 비싼 fab의 비용 비대칭을 반영하여, 손실 함수에서 불량 샘플에
-가중치 5를 부여하였다(class-weighted BCE). 이 가중만으로 컷오프 0.5 기준 불량
-recall이 60.77%에서 85.44%로 오르며, 추론 시점의 컷오프와 함께 운영점을
-조절하는 두 개의 손잡이가 된다.
+Two models were implemented in numpy and compared.
 
-## 4. 실험 및 결과
+The single-layer perceptron is trained with the pocket algorithm. Because the good region is an AND of intervals (a box) while the perceptron can draw only a single hyperplane, it is expected to be unable to solve the problem in principle. In practice, the number of misclassification corrections during training fails to decrease to the end — a non-convergence.
 
-데이터는 11 run × 20,000 = 220,000장이며, 9 run으로 학습하고 2 run으로
-평가하였다.
+The MLP estimates P(good) with a hidden layer (16 neurons by default, configurable to multiple layers via the CLI) and a sigmoid output, and includes backpropagation, He initialization, and L2 regularization. To reflect the fab's cost asymmetry — a fail escape (FN) is more expensive than discarding a good wafer (FP) — the loss assigns a weight of 5 to fail samples (class-weighted BCE). This weighting alone raises fail recall at a 0.5 cutoff from 60.77% to 85.44%, and together with the inference-time cutoff provides two knobs for tuning the operating point.
 
-### 4.1 퍼셉트론 대 MLP
+## 4. Experiments and Results
 
-| 지표 (불량 = positive) | 단층 퍼셉트론 (pocket) | MLP (은닉 16) |
+The dataset is 11 runs × 20,000 = 220,000 wafers, trained on 9 runs and evaluated on 2.
+
+### 4.1 Perceptron vs. MLP
+
+| Metric (fail = positive) | Single-layer perceptron (pocket) | MLP (hidden 16) |
 |---|---|---|
-| Test 정확도 | 79.86% | 83.82% |
+| Test accuracy | 79.86% | 83.82% |
 | Precision | 34.63% | 55.22% |
 | Recall | 4.95% | 85.44% |
 | F1 | 8.66% | 67.08% |
 
-모든 웨이퍼를 양품으로 판정하는 베이스라인의 정확도가 80.70%이므로, 불균형
-데이터에서 정확도는 판단 기준이 되지 못한다. 퍼셉트론은 불량의 95%를 놓치며
-정확도조차 베이스라인에 미달한다. 특징이 5개로 늘어 스펙 박스가 5차원이
-될수록, 초평면 하나로 "가운데 구간만 양품"을 표현할 수 없다는 구조적 한계는
-더 뚜렷해진다.
+Since a baseline that labels every wafer as good scores 80.70% accuracy, accuracy is not a meaningful criterion on this imbalanced data. The perceptron misses 95% of fails and does not even reach the baseline accuracy. As the number of features grows to five and the spec box becomes five-dimensional, the structural limitation — a single hyperplane cannot express "only the middle interval is good" — becomes even more pronounced.
 
 ![decision boundary](docs/decision_boundary.png)
 
-결정 경계를 Vth–Oxide 평면에 사영한 위 그림에서(나머지 특징은 중앙값 고정),
-퍼셉트론은 평면을 대각선으로 자를 뿐이어서 한쪽 방향의 불량을 전부 양품으로
-판정하는 반면, MLP는 실제 스펙 박스(점선)에 근접한 닫힌 영역을 학습하였다.
+In the figure above, the decision boundary is projected onto the Vth–Oxide plane (the remaining features fixed at their medians). The perceptron merely cuts the plane diagonally and thus labels all fails on one side as good, whereas the MLP has learned a closed region close to the actual spec box (dashed line).
 
-### 4.2 운영점 분석
+### 4.2 Operating-point analysis
 
-MLP는 확률을 출력하므로 판정 컷오프로 운영점을 선택할 수 있다. 불량 유출이
-치명적인 환경에서는 컷오프를 올려 recall을 우선한다.
+Because the MLP outputs a probability, the operating point can be selected via the decision cutoff. In settings where fail escapes are critical, the cutoff is raised to prioritize recall.
 
-| cutoff | precision(fail) | recall(fail) | F1 |
+| cutoff | precision (fail) | recall (fail) | F1 |
 |---|---|---|---|
 | 0.1 | 79.94% | 52.60% | 63.45% |
 | 0.5 | 55.22% | 85.44% | 67.08% |
 | 0.9 | 33.67% | 98.11% | 50.13% |
 
-특정 컷오프가 아닌 전 임계값에서의 판별력은 ROC·PR 곡선으로 평가하였다
-(`ml/visualize_metrics.py`). 퍼셉트론은 확률 출력이 없으므로 경계까지의 부호
-거리를 점수로 사용하였다.
+Discriminative power across all thresholds — rather than at a specific cutoff — was evaluated with ROC and PR curves (`ml/visualize_metrics.py`). Since the perceptron has no probability output, its signed distance to the boundary was used as the score.
 
 ![model evaluation](docs/model_evaluation.png)
 
-| 지표 | 단층 퍼셉트론 | MLP |
+| Metric | Single-layer perceptron | MLP |
 |---|---|---|
 | ROC AUC | 0.386 | 0.925 |
-| PR AP (불량) | 0.187 | 0.774 |
+| PR AP (fail) | 0.187 | 0.774 |
 
-퍼셉트론의 ROC AUC는 무작위 분류기(0.5)보다도 낮다. 불량이 5차원 박스의 모든
-면 바깥에 흩어져 있어, 단일 선형 점수로는 불량의 순위조차 매길 수 없기
-때문이다 — 점수축의 한쪽 끝을 불량으로 몰면 반대쪽 끝의 불량을 놓치게 된다.
+The perceptron's ROC AUC is below that of a random classifier (0.5). Because fails are scattered outside every face of the five-dimensional box, a single linear score cannot even rank the fails — pushing one end of the score axis toward "fail" leaves the fails at the other end missed.
 
-### 4.3 파생 특징: 표현력의 소재
+### 4.3 Derived features: where expressive power lives
 
-스펙 한계는 fab이 아는 제품 요구사항이므로, 각 측정값이 가장 가까운 스펙
-경계에서 얼마나 떨어졌는지(margin, 스펙 반폭으로 정규화)를 특징으로 직접
-계산해 줄 수 있다(`ml/features.py`, `--margins`). margin들의 최솟값
-MinMargin까지 추가하면 "모든 margin ≥ 0이면 양품"이라는 박스 규칙이 축 하나에
-대한 선형 컷으로 펴진다.
+Since the spec limits are product requirements known to the fab, one can compute directly, as a feature, how far each measurement lies from its nearest spec boundary (a margin, normalized by the spec half-width) (`ml/features.py`, `--margins`). Adding the minimum of these margins, MinMargin, flattens the box rule "good iff every margin ≥ 0" into a linear cut along a single axis.
 
-| 모델 | 특징 | recall(fail) | F1 |
+| Model | Features | recall (fail) | F1 |
 |---|---|---|---|
-| 퍼셉트론 | 원본 5개 | 4.95% | 8.66% |
-| 퍼셉트론 | + margin 6개 | 74.57% | 69.73% |
-| MLP | 원본 5개 | 85.44% | 67.08% |
-| MLP | + margin 6개 | 87.34% | 68.71% |
+| Perceptron | 5 raw | 4.95% | 8.66% |
+| Perceptron | + 6 margins | 74.57% | 69.73% |
+| MLP | 5 raw | 85.44% | 67.08% |
+| MLP | + 6 margins | 87.34% | 68.71% |
 
-박스를 원리적으로 풀지 못하던 퍼셉트론이 MLP에 근접한 수준으로 회복된다.
-학습된 가중치를 보면 MinMargin에 가장 큰 가중치(+0.149)가 스스로 부여되어
-있다. 규칙의 기하를 특징에 인코딩해 주면 모델에는 판단만 남는 것이다. 반면
-MLP는 은닉층이 이미 박스를 표현할 수 있어 이득이 작다. 한편 어느 쪽도 100%에
-도달하지 못하는데, margin이 측정값으로 계산되는 반면 라벨은 참값 기준이어서
-경계 근처의 모호함은 특징 설계로 제거될 수 없기 때문이다.
+The perceptron, which could not solve the box in principle, recovers to near the MLP's level. Inspecting the learned weights, it assigns the largest weight (+0.149) to MinMargin on its own. Encoding the geometry of the rule into the features leaves the model with only the judgment to make. The MLP, by contrast, gains little because its hidden layer can already express the box. Meanwhile neither reaches 100%, because the margins are computed from measured values while the labels are based on true values, so the ambiguity near the boundary cannot be removed by feature design.
 
-### 4.4 sim2real: 물리가 어긋난 시뮬레이터의 데이터는 유효한가
+### 4.4 sim2real: are data from a physics-mismatched simulator useful?
 
-4.3절까지는 학습과 평가가 같은 시뮬레이터 안에서 이루어졌다. 시뮬레이터가 곧
-현실이므로 잘 맞는 것이 당연하다. 실제로 의미 있는 질문은 시뮬레이터의 물리가
-현실과 어긋나 있을 때에도 그 데이터가 쓸모 있는가이다.
+Up to Section 4.3, training and evaluation took place inside the same simulator; agreement is trivially expected because the simulator *is* reality. The genuinely meaningful question is whether the data are useful even when the simulator's physics differs from reality.
 
-이를 위해 "현실 fab" 역할을 하는 두 번째 세계를 정의하였다. 물리 결합 계수가
-디지털 트윈과 다르고(트윈은 이 차이를 알지 못한다) 테스터 노이즈가 약 40% 더
-크다(`REAL_FAB_PHYSICS`/`REAL_FAB_NOISE`, 생성은 `main.py --real`). 스펙
-한계는 제품 요구사항이므로 두 세계가 공유한다.
+To this end, a second world playing the role of a "real fab" was defined. Its physical coupling coefficients differ from the digital twin's (and the twin does not know this difference), and its tester noise is about 40% larger (`REAL_FAB_PHYSICS` / `REAL_FAB_NOISE`, generated with `main.py --real`). The spec limits are product requirements and are shared between the two worlds.
 
-세 가지 전략을 비교하였다. (i) scratch: 확보 가능한 실데이터만으로 학습,
-(ii) zero-shot: 합성 데이터만으로 학습하여 그대로 투입, (iii) fine-tune: 합성
-데이터로 사전학습 후 소량의 실데이터로 미세조정. 평가는 현실 fab의 held-out
-run 2개(40,000장)에 대한 불량 F1이며, 실데이터 예산을 바꿔가며 3개 seed의
-평균을 취했다(`ml/sim2real.py`).
+Three strategies were compared: (i) scratch — train only on the affordable real data; (ii) zero-shot — train only on synthetic data and deploy as-is; (iii) fine-tune — pretrain on synthetic data, then fine-tune on a small amount of real data. Evaluation is fail-class F1 on two held-out runs (40,000 wafers) of the real fab, averaged over three seeds while varying the real-data budget (`ml/sim2real.py`).
 
-| 전략 | 실데이터 250장 | 1,000장 | 4,000장 | 16,000장 |
+| Strategy | 250 real | 1,000 | 4,000 | 16,000 |
 |---|---|---|---|---|
-| scratch (실데이터만) | 57.44% | 69.88% | 76.15% | 77.45% |
-| fine-tune (합성 사전학습 + 실데이터) | 78.61% | 78.64% | 79.37% | 79.27% |
+| scratch (real data only) | 57.44% | 69.88% | 76.15% | 77.45% |
+| fine-tune (synthetic pretrain + real) | 78.61% | 78.64% | 79.37% | 79.27% |
 
-참조선: zero-shot F1 77.13%, oracle(실데이터 20,000장 전량 사용) 76.56%.
+Reference lines: zero-shot F1 77.13%, oracle (all 20,000 real wafers) 76.56%.
 
 ![sim2real](docs/sim2real.png)
 
-관찰은 세 가지다.
+There are three observations.
 
-첫째, 합성 사전학습에 실데이터 250장을 더한 모델이 실데이터 20,000장으로
-처음부터 학습한 모델보다 낫다(78.6% > 76.6%). 실데이터 요구량이 약 80분의
-1로 줄어든 셈이다.
+First, a model with synthetic pretraining plus 250 real wafers outperforms a model trained from scratch on 20,000 real wafers (78.6% > 76.6%). The real-data requirement is effectively cut by about 80×.
 
-둘째, 이 우위의 원인은 데이터의 양이 아니라 공정 조건의 다양성이다. 실데이터
-pool 20,000장은 단일 공정 조건(run 1개)에서 나온 반면, 트윈의 합성 데이터는
-12가지 조건을 포괄한다. 같은 조건의 웨이퍼를 아무리 많이 보아도 모델은 그
-조건 근처의 세계밖에 배우지 못한다. 실제 fab에서도 데이터 수집의 병목은
-장수가 아니라 조건 커버리지라는 점과 부합한다.
+Second, the cause of this advantage is not the quantity of data but the diversity of process conditions. The 20,000-wafer real pool comes from a single process condition (one run), whereas the twin's synthetic data span 12 conditions. No matter how many wafers of the same condition a model sees, it only learns the world near that one condition. This agrees with the fact that, in a real fab too, the bottleneck of data collection is condition coverage, not wafer count.
 
-셋째, fine-tune은 zero-shot보다 전 구간에서 1.5–2.2%p 우위이다. 즉 물리가
-어긋난 만큼의 손실은 소량의 실데이터 적응으로 회복된다.
+Third, fine-tune beats zero-shot across the whole range by 1.5–2.2 points. That is, the loss incurred by the physics mismatch is recovered by adapting on a small amount of real data.
 
-종합하면, 가상 데이터의 가치는 시뮬레이터의 물리적 완벽함에 의존하지 않는다.
-본 실험은 트윈의 물리를 의도적으로 틀리게 설정하고도 그 데이터가 실데이터의
-대부분을 대체함을 보였다. 이는 합성 데이터의 물리적 정합성을 검증하는 것이
-아니라, 정합성이 깨졌을 때의 강건성을 측정한 것이다.
+Taken together, the value of synthetic data does not depend on the physical perfection of the simulator. This experiment set the twin's physics deliberately wrong and still showed that its data replace most of the real data. This measures robustness to a broken physical consistency, rather than verifying the physical consistency of the synthetic data.
 
-## 5. 한계 및 향후 과제
+## 5. Limitations and Future Work
 
-가장 큰 한계는 본 실험의 "현실 fab" 역시 시뮬레이터라는 점이다. 물리 상수를
-달리한 두 번째 가상 세계와의 전이이므로 엄밀히는 sim-to-sim 실험이며, 실측
-공정 데이터에 대한 검증은 이루어지지 않았다. 또한 세계 간 차이를 결합 계수와
-노이즈 크기의 이동으로만 모델링했는데, 실제의 시뮬레이터-현실 간극은 누락된
-변수나 비정상성 등 더 구조적인 형태일 수 있다.
+The biggest limitation is that the "real fab" in this experiment is itself a simulator. Since the transfer is to a second virtual world with different physical constants, this is strictly a sim-to-sim experiment, and no validation against measured process data has been done. The inter-world difference is also modeled only as shifts in coupling coefficients and noise magnitude, whereas the real simulator-to-reality gap may take a more structural form, such as missing variables or non-stationarity.
 
-향후 과제로는 다음을 생각하고 있다.
+The following are considered as future work.
 
-- 실측 데이터(예: 공개 웨이퍼맵 데이터셋)에 대한 검증
-- 소량 실데이터로 시뮬레이터의 물리 상수를 역추정하는 캘리브레이션과,
-  모델 fine-tune 중 어느 쪽이 실데이터 효율이 좋은지 비교
-- 다중 seed 학습에 의한 지표 분산(신뢰구간) 리포트
-- PyTorch 재구현과 numpy 구현의 비교
+- Validation against measured data (e.g., a public wafer-map dataset)
+- A comparison of which is more data-efficient: calibrating the simulator's physical constants from a small amount of real data, versus fine-tuning the model
+- Reporting metric variance (confidence intervals) from multi-seed training
+- A comparison of a PyTorch reimplementation against the numpy implementation
 
-## 부록 A. 저장소 구조
+## Appendix A. Repository Structure
 
 ```
-semiconductor-process-simulator/
-├── main.py                     # 시뮬레이션 엔트리포인트
-├── simulation/                 # 가상 fab (데이터 생성)
-│   ├── config.py               # 공정 스펙, 샘플링 범위, 측정 노이즈, 물리 상수
-│   ├── config_sampler.py       # run마다 공정 조건 샘플링 (seed 기록)
-│   ├── wafer_generate.py       # 웨이퍼 물리량 생성 + 측정 노이즈
-│   ├── wafer_analysis.py       # 스펙 판정 → 수율
-│   ├── defect_analysis.py      # 불량 원인별 집계
-│   ├── visualization.py        # 분포/파레토 차트
-│   ├── correlation_analysis.py # 상관 분석/산점도
-│   ├── run_logger.py           # run_info.json + wafers.csv.gz 저장
-│   └── run_manage.py           # run 폴더 관리 (run_001, run_002, ...)
-├── ml/                         # 분류기 (numpy 구현)
-│   ├── dataset.py              # run 취합 로더, run 단위 train/test 분리
-│   ├── perceptron.py           # 단층 퍼셉트론 + pocket 알고리즘
-│   ├── mlp.py                  # MLP + 역전파 + 가중 손실 + L2 + CLI
-│   ├── features.py             # 파생 특징 (스펙 경계까지의 margin)
-│   ├── metrics.py              # 공용 지표 (혼동행렬/PRF1, ROC·PR)
-│   ├── judge.py                # 저장된 모델로 새 run 판정 (EDS 단계)
-│   ├── sim2real.py             # 합성 사전학습 vs 실데이터 예산 실험
-│   ├── visualize_boundary.py   # 결정 경계 시각화
-│   └── visualize_metrics.py    # ROC·PR·학습곡선·혼동행렬 시각화
-└── graph/                      # 실행 결과물 (gitignore)
-    ├── run_XXX/                # run별 그래프, run_info.json, wafers.csv.gz
-    └── real/run_XXX/           # "현실 fab" run (main.py --real)
+virtual-fab/
+├── main.py                     # simulation entry point
+├── simulation/                 # the virtual fab (data generation)
+│   ├── config.py               # process spec, sampling ranges, measurement noise, physics constants
+│   ├── config_sampler.py       # samples a process condition per run (records the seed)
+│   ├── wafer_generate.py       # generates wafer physical quantities + measurement noise
+│   ├── wafer_analysis.py       # spec judgment → yield
+│   ├── defect_analysis.py      # aggregation by fail cause
+│   ├── visualization.py        # distribution / Pareto charts
+│   ├── correlation_analysis.py # correlation analysis / scatter plots
+│   ├── run_logger.py           # saves run_info.json + wafers.csv.gz
+│   └── run_manage.py           # run-folder management (run_001, run_002, ...)
+├── ml/                         # classifiers (numpy implementation)
+│   ├── dataset.py              # run-aggregating loader, run-based train/test split
+│   ├── perceptron.py           # single-layer perceptron + pocket algorithm
+│   ├── mlp.py                  # MLP + backprop + weighted loss + L2 + CLI
+│   ├── features.py             # derived features (margin to the spec boundary)
+│   ├── metrics.py              # shared metrics (confusion matrix / PRF1, ROC·PR)
+│   ├── judge.py                # judge a new run with the saved model (the EDS step)
+│   ├── sim2real.py             # synthetic-pretrain vs real-data-budget experiment
+│   ├── visualize_boundary.py   # decision-boundary visualization
+│   └── visualize_metrics.py    # ROC·PR·training-curve·confusion-matrix visualization
+└── graph/                      # run artifacts (gitignored)
+    ├── run_XXX/                # per-run graphs, run_info.json, wafers.csv.gz
+    └── real/run_XXX/           # "real fab" runs (main.py --real)
 ```
 
-## 부록 B. 설치 및 실행
+## Appendix B. Installation and Running
 
 ```bash
 python3 -m venv .venv
@@ -243,24 +171,24 @@ source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-전체 파이프라인(데이터 생성 → 학습 → 판정):
+Full pipeline (data generation → training → judgment):
 
 ```bash
-python3 run_all.py                 # 10 run 생성 → MLP 학습·저장 → 새 lot 판정
-python3 run_all.py --runs 20       # 생성 run 수 조절
-python3 run_all.py --cutoff 0.9    # recall 우선 운영점으로 판정
+python3 run_all.py                 # generate 10 runs → train & save the MLP → judge a new lot
+python3 run_all.py --runs 20       # change the number of generated runs
+python3 run_all.py --cutoff 0.9    # judge at a recall-first operating point
 ```
 
-단계별 실행:
+Step by step:
 
 ```bash
-python3 main.py                  # 데이터 생성 (실행마다 새 조건으로 2만 장 축적)
-python3 ml/dataset.py            # 누적 데이터 현황
-python3 ml/perceptron.py         # 퍼셉트론 학습/평가 (--margins: 파생 특징)
-python3 ml/mlp.py                # MLP 학습/평가, graph/ml/mlp_model.npz 저장
-python3 ml/judge.py run_011      # 저장된 모델로 새 run 판정 (컷오프 지정 가능)
-python3 ml/visualize_boundary.py # 결정 경계 그림
-python3 ml/visualize_metrics.py  # ROC·PR·학습곡선·혼동행렬 그림
-python3 main.py --real           # "현실 fab" run 생성 (sim2real용)
-python3 ml/sim2real.py           # sim2real 실험
+python3 main.py                  # generate data (accumulates 20k wafers under a new condition each run)
+python3 ml/dataset.py            # accumulated-data status
+python3 ml/perceptron.py         # train/evaluate the perceptron (--margins: derived features)
+python3 ml/mlp.py                # train/evaluate the MLP, saves graph/ml/mlp_model.npz
+python3 ml/judge.py run_011      # judge a new run with the saved model (cutoff configurable)
+python3 ml/visualize_boundary.py # decision-boundary figure
+python3 ml/visualize_metrics.py  # ROC·PR·training-curve·confusion-matrix figure
+python3 main.py --real           # generate a "real fab" run (for sim2real)
+python3 ml/sim2real.py           # the sim2real experiment
 ```
