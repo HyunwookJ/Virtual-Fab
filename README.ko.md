@@ -210,7 +210,7 @@ pool 20,000장은 단일 공정 조건(run 1개)에서 나온 반면, 트윈의 
 ## 부록 A. 저장소 구조
 
 ```
-semiconductor-process-simulator/
+virtual-fab/
 ├── main.py                     # 시뮬레이션 엔트리포인트
 ├── simulation/                 # 가상 fab (데이터 생성)
 │   ├── config.py               # 공정 스펙, 샘플링 범위, 측정 노이즈, 물리 상수
