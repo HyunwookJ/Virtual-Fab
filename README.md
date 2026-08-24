@@ -572,7 +572,12 @@ trained on 250 real wafers (31.67%), and beat one trained on 20,000 real wafers
 - **It does not conclude that fine-tuning is useless.** The absence of any gain
   here is most likely because the data available for adaptation came from a single
   process condition. With real data spanning several conditions the result could
-  differ.
+  differ. **The evaluation protocol also contributes:** adaptation uses one
+  condition (`run_001`) while evaluation uses two different, previously unseen
+  ones, so what this experiment actually asks is whether adapting on condition A
+  helps on unobserved conditions B and C. A production deployment, by contrast,
+  adapts on data from the line it is deployed to and runs on that same line, where
+  adaptation and evaluation share the condition — and the result there could differ.
 - Correcting the simulator itself from real data (back-solving its physics
   constants, i.e. **calibration**) is the opposite direction and a separate
   problem. Which is more efficient — adapting the model to reality, or adapting the
