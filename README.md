@@ -1,7 +1,7 @@
 # Virtual Fab — Learning a Wafer Pass/Fail Classifier from Simulated Process Data
 
 > **Research question:** Can cheaply generated synthetic wafer data replace expensive real wafers?
-> **Summary:** To a large extent, yes. This document measures the extent quantitatively.
+> **Summary:** It can. A model trained only on data from a simulator whose physics was deliberately set wrong outperformed a model trained on 20,000 real wafers by 12 points.
 
 This project builds a simulator of a semiconductor process (a virtual fab) and uses
 the data it generates to train a good/fail classifier for the EDS test step. The
@@ -27,16 +27,16 @@ one of the goals of the project.
 
 1. The good region is a **simultaneous satisfaction (AND)** of several conditions,
    so a single-layer perceptron — which can only draw one hyperplane — cannot solve
-   the problem structurally. It missed 95% of the fails. An MLP with a hidden layer
+   the problem structurally. It missed 92% of the fails. An MLP with a hidden layer
    solves it. (→ [Section 4](#4-the-two-classification-models))
 2. With **appropriately designed features**, however, the perceptron recovers to a
-   practical level: fail recall rises from 4.95% to 74.57%. Expressive power resides
+   usable level: fail recall rises from 8.00% to 44.57%. Expressive power resides
    not only in the model but also in the features.
-   (→ [Section 5.4](#54-the-effect-of-derived-margin-features))
-3. Even when the simulator's physics is set **deliberately different** from reality,
-   a model pretrained on synthetic data remains effective. A model given a further
-   **250 real wafers** outperformed one trained from scratch on **20,000 real
-   wafers**. (→ [Section 6](#6-when-the-simulators-physics-differs-from-reality-sim2real))
+   (→ [Section 5.5](#55-the-effect-of-derived-margin-features))
+3. Even with the simulator's physics set **deliberately different** from reality, a
+   model trained on its data remained effective. A model that saw **no real wafers
+   at all** beat one trained on **20,000 real wafers** by 12 points.
+   (→ [Section 6](#6-when-the-simulators-physics-differs-from-reality-sim2real))
 
 **Suggested reading order:** if time is limited, Sections 1 → 3.3 → 6 convey the
 core argument on their own.
@@ -214,7 +214,8 @@ As the parameter count grows to five, the good region becomes a 5-D box and the
 fails are distributed **outside every face, in every direction**, making the
 limitation more pronounced still. The perceptron fails here not from insufficient
 training but because the task is **structurally impossible** for it — and indeed
-the number of misclassification corrections never decreases through training.
+the number of misclassification corrections never decreases through training
+(about 59,000 every epoch).
 
 ### 4.3 The MLP: closed regions from a hidden layer
 
@@ -227,14 +228,16 @@ the perceptron could not do.
 The implementation includes the following (`ml/mlp.py`).
 
 - **Backpropagation** — propagating the output error back through the preceding
-  layers to compute the correction for each weight. Implemented directly.
+  layers to compute the correction for each weight. Implemented directly, and its
+  correctness verified against numerical differentiation
+  ([Section 5.1](#51-reproducibility-and-run-to-run-spread)).
 - **He initialization** — scaling the initial weights to the size of the layer so
   that the signal neither vanishes nor explodes as it passes through.
 - **L2 regularization** — penalizing excessively large weights to curb overfitting.
 - **Sigmoid output** — mapping the output into the interval 0 to 1. This value is
   interpreted as **P(good), the probability that the wafer is good**. Producing a
   probability rather than a binary verdict is exploited in
-  [Section 5.3](#53-the-decision-cutoff-and-the-operating-point).
+  [Section 5.4](#54-the-decision-cutoff-and-the-operating-point).
 
 ### 4.4 Cost asymmetry and class weighting
 
@@ -244,47 +247,94 @@ costs.
 - **Passing a failed wafer as good** → it reaches the customer. Critical.
 - **Scrapping a good wafer as failed** → the loss is limited to one wafer.
 
-Since roughly 80% of the data consists of good wafers, however, an unadjusted model
+Since roughly 74% of the data consists of good wafers, however, an unadjusted model
 drifts toward answering "good" in most cases, because doing so is less often wrong
 on average.
 
 To correct this, the loss function counts **each failed wafer with the weight of
-five good wafers** (`fail_weight=5`, class-weighted BCE). This weighting alone
-raised fail recall from **60.77% to 85.44%**.
+five good wafers** (`fail_weight=5`, class-weighted BCE). The result:
+
+| | Unweighted | Weighted (5) |
+|---|---|---|
+| Precision (fail) | 86.24% | 70.50% |
+| Recall (fail) | 71.25% | **87.47%** |
+| F1 | 78.03% | 78.08% |
+
+Note that **F1 barely moves** (78.03% → 78.08%). The weighting is therefore not a
+device that improves the model overall but one that **shifts the operating point**.
+Fail detection rose from 71.25% to 87.47% at the cost of scrapping more sound
+wafers (precision 86.24% → 70.50%). Given the cost asymmetry above the trade is
+worth making, but it is not a free improvement.
 
 ---
 
 ## 5. Experiments and results
 
-The dataset comprises 11 runs × 20,000 = **220,000 wafers**, trained on 9 runs and
-evaluated on the remaining 2 (40,000 wafers).
+The dataset comprises 12 runs × 20,000 = **240,000 wafers**, trained on 10 runs and
+evaluated on the remaining 2 (40,000 wafers: `run_001` and `run_008`).
 
-### 5.1 Choice of evaluation metric
+### 5.1 Reproducibility and run-to-run spread
 
-On this data, **labeling every wafer as good already yields 80.70% accuracy**,
-because approximately 80% of the test set is genuinely good. Since a model that has
-learned nothing scores 80 out of 100, accuracy cannot serve as a criterion.
+Every figure in this section comes from running `python3 ml/mlp.py` and friends on
+the dataset produced by `./reproduce.sh`, and **re-running the same command
+reproduces the same values exactly.** Each run's data is fixed by a recorded seed
+(`main.py --seed`, with the seed used stored in `run_info.json`), and the model's
+initialization and shuffling are fixed by a default seed of 0.
+
+The correctness of the hand-written backpropagation was verified against
+**numerical differentiation**: the loss is differentiated with respect to each
+weight by finite differences and compared to the gradient backprop computes. All
+six configurations tested — varying hidden-layer count and regularization — agree
+to a relative error below `1e-6` (`python3 tests/test_gradients.py`).
+
+Changing the seed does change the numbers. The spread of the MLP across 10
+initialization seeds is:
+
+| Metric | Mean ± sd | Range |
+|---|---|---|
+| F1 (fail) | 76.88 ± 1.77% | 74.30 – 78.77% |
+| Recall (fail) | 89.55 ± 3.16% | 84.71 – 94.03% |
+| Recall @ cutoff 0.9 | **98.64 ± 0.58%** | 97.50 – 99.37% |
+
+Every figure in the tables below comes from the default seed (0), so differences
+between them should be read against this spread — a gap of around 1 point is not
+significant. Fail detection at cutoff 0.9, by contrast, barely moves (±0.58
+points), meaning the model behaves stably once the operating point is set to favor
+recall.
+
+### 5.2 Choice of evaluation metric
+
+On this data, **labeling every wafer as good already yields 74.23% accuracy**,
+because 74.23% of the test set is genuinely good. Since a model that has learned
+nothing scores 74 out of 100, accuracy cannot serve as a criterion.
 
 Evaluation therefore rests on **how well the fails are detected** (fail = positive).
 
 | Metric | Definition | Example reading |
 |---|---|---|
-| **Precision** | Of the wafers judged to be fails, the fraction that genuinely failed | 34.63% = only about a third of the flagged wafers were true fails; the remainder were sound wafers that were scrapped |
-| **Recall** | Of the wafers that genuinely failed, the fraction the model detected | 4.95% = 5 fails detected out of every 100, with **95 passed through** |
+| **Precision** | Of the wafers judged to be fails, the fraction that genuinely failed | 51.82% = only about half of the flagged wafers were true fails; the rest were sound wafers that were scrapped |
+| **Recall** | Of the wafers that genuinely failed, the fraction the model detected | 8.00% = 8 fails detected out of every 100, with **92 passed through** |
 | **F1** | The harmonic mean of the two, used when a single figure is needed | Scoring well on only one of the two keeps it low |
 
-### 5.2 Perceptron compared with MLP
+### 5.3 Perceptron compared with MLP
 
 | Metric (fail = positive) | Single-layer perceptron | MLP (hidden 16) |
 |---|---|---|
-| Test accuracy | 79.86% | 83.82% |
-| Precision | 34.63% | 55.22% |
-| Recall | **4.95%** | **85.44%** |
-| F1 | 8.66% | 67.08% |
+| Test accuracy | 74.38% | 87.34% |
+| Precision | 51.82% | 70.50% |
+| Recall | **8.00%** | **87.47%** |
+| F1 | 13.85% | 78.08% |
 
-The perceptron missed 95% of the fails, and its accuracy does not even reach the
-"label everything good" baseline of 80.70% — consistent with the prediction made in
+The perceptron missed 92% of the fails, and its accuracy (74.38%) is
+indistinguishable from the "label everything good" baseline of 74.23% — training
+bought it almost nothing. This matches the prediction made in
 [Section 4.2](#42-the-structural-limitation-of-the-single-layer-perceptron).
+
+The perceptron also varies widely with the seed (F1 16.95 ± 3.00%, range
+13.85 – 21.23%), because a model that oscillates instead of converging leaves the
+pocket selecting a different boundary each time. With a standard deviation of 18%
+of the mean, the single figure in the table (which sits at the bottom of that
+range) is representative and nothing more — in contrast to the MLP's ±1.77 points.
 
 ![decision boundary](docs/decision_boundary.png)
 
@@ -294,7 +344,7 @@ remaining three parameters fixed at their medians). The perceptron merely
 good, whereas the MLP has learned a **closed region** close to the actual spec box
 (dashed line).
 
-### 5.3 The decision cutoff and the operating point
+### 5.4 The decision cutoff and the operating point
 
 Because the MLP outputs the probability P(good), the threshold above which a wafer
 is passed can be chosen at inference time. That threshold is the cutoff, with a
@@ -306,14 +356,17 @@ default of 0.5, and the decision criterion it defines is called the
 
 | cutoff | Precision (fail) | Recall (fail) | F1 |
 |---|---|---|---|
-| 0.1 | 79.94% | 52.60% | 63.45% |
-| 0.5 | 55.22% | 85.44% | 67.08% |
-| 0.9 | 33.67% | **98.11%** | 50.13% |
+| 0.1 | 91.86% | 60.78% | 73.16% |
+| 0.3 | 79.86% | 78.38% | **79.11%** |
+| 0.5 | 70.50% | 87.47% | 78.08% |
+| 0.7 | 60.29% | 93.47% | 73.30% |
+| 0.9 | 46.09% | **98.23%** | 62.75% |
 
-On a line where an escaped fail is critical, the cutoff can be set to 0.9 to
-prioritize recall. The operating point is thus adjustable through two parameters:
-`fail_weight` at training time and `cutoff` at inference time
-(`python3 ml/judge.py run_011 0.9`).
+By F1 alone 0.3 is optimal, but on a line where an escaped fail is critical, 0.9 —
+catching 98% of the fails — is the reasonable choice. **Which point to pick is
+decided by the cost of the two errors, not by a metric.** The operating point is
+adjustable through two parameters: `fail_weight` at training time and `cutoff` at
+inference time (`python3 ml/judge.py run_011 0.9`).
 
 Discriminative power **across all thresholds**, rather than at one cutoff, is
 evaluated with ROC and PR curves. ROC AUC can be read as "the probability that,
@@ -324,16 +377,16 @@ more fail-like of the two"; 0.5 corresponds to a random classifier.
 
 | Metric | Single-layer perceptron | MLP |
 |---|---|---|
-| ROC AUC | **0.386** | 0.925 |
-| PR AP (fail) | 0.187 | 0.774 |
+| ROC AUC | **0.250** | 0.950 |
+| PR AP (fail) | 0.238 | 0.890 |
 
-The perceptron's ROC AUC falls **below that of a random classifier (0.5)**. Its
-score increases in only one direction, whereas the fails are distributed **outside
-every face** of the box. Pushing one end of the score axis toward "fail" causes the
-fails at the opposite end to be ranked as the most good-like wafers of all. The
-model fails even to rank the fails correctly.
+The perceptron's ROC AUC is **half that of a random classifier**. Its score
+increases in only one direction, whereas the fails are distributed **outside every
+face** of the box. Pushing one end of the score axis toward "fail" causes the fails
+at the opposite end to be ranked as the most good-like wafers of all. The model
+fails even to rank the fails correctly.
 
-### 5.4 The effect of derived margin features
+### 5.5 The effect of derived margin features
 
 Spec limits are not physical laws but **product requirements the company already
 possesses**, so supplying them to the model does not constitute information
@@ -353,20 +406,26 @@ solves. The results are as follows.
 
 | Model | Features | Recall (fail) | F1 |
 |---|---|---|---|
-| Perceptron | 5 raw | 4.95% | 8.66% |
-| Perceptron | **+ 6 margins** | **74.57%** | **69.73%** |
-| MLP | 5 raw | 85.44% | 67.08% |
-| MLP | + 6 margins | 87.34% | 68.71% |
+| Perceptron | 5 raw | 8.00% | 13.85% |
+| Perceptron | **+ 6 margins** | **44.57%** | **59.05%** |
+| MLP | 5 raw | 87.47% | 78.08% |
+| MLP | + 6 margins | 91.16% | 77.54% |
 
-The perceptron, structurally incapable of solving the problem before, recovers to
-near the MLP's level. Inspecting its learned weights shows that it assigned the
-largest weight (+0.149) to `MinMargin` on its own. Encoding the geometry of the
-rule into the features leaves the model with only the judgment to make.
+The perceptron's F1 rises from 13.85% to 59.05%, more than a fourfold improvement:
+a problem it could not solve structurally becomes one it handles usably. It still
+falls short of the MLP (78.08%), because `MinMargin` linearizes the rule completely
+only for **true** values, while in practice it is computed from noisy measurements.
 
-The MLP, by contrast, gains little, since its hidden layer can already express the
-box and the additional information adds little utility. **Expressive power resides
-both in the model and in the features, and strengthening one reduces the demand on
-the other** — the conclusion of this section.
+Inspecting the learned weights shows the perceptron assigning the largest weight
+(**+0.1564**) to `MinMargin` on its own — four times the runner-up, `Leakage`
+(+0.0382). Encode the geometry of the rule into the features and the model finds
+that axis by itself.
+
+The MLP, by contrast, gains nothing (F1 78.08% → 77.54%), since its hidden layer
+can already express the box and the extra information adds no utility.
+**Expressive power resides both in the model and in the features, and
+strengthening one reduces the demand on the other** — the conclusion of this
+section.
 
 Neither model reaches 100%, however, because the margins are computed from
 **measured** values while the labels are based on **true** values
@@ -402,7 +461,7 @@ To address this, a second world was defined to play the role of a "real fab."
 | Physics constants | `PHYSICS` | `REAL_FAB_PHYSICS` — **different** (e.g. oxide→Vth coupling 0.010 vs 0.013) |
 | Measurement noise | `MEASUREMENT_NOISE` | `REAL_FAB_NOISE` — approximately **40% larger** (real testers are less precise) |
 | Spec limits | shared | shared (product requirements, identical across both worlds) |
-| Cost of data | free, 12 process conditions | expensive, budget-limited |
+| Cost of data | free, 12 process conditions | expensive, budget-limited (a single condition) |
 | Location | `graph/run_*` | `graph/real/run_*` (`main.py --real`) |
 
 Notably, **the twin has no knowledge of this difference**. The synthetic data here
@@ -421,39 +480,48 @@ Three methods of building an EDS model for the real fab were compared.
 | **fine-tune** | Pretrain on synthetic data, then train further on a small amount of real data | Preparing in advance, then adjusting on actual questions |
 
 Evaluation uses fail-class F1 on **two held-out runs (40,000 wafers) of the real
-fab**, averaged over 3 seeds while varying the real-data budget (`ml/sim2real.py`).
+fab**, reported as the **mean ± standard deviation over 10 seeds** while varying
+the real-data budget (`ml/sim2real.py`). The real-data pool is one run of the real
+fab (20,000 wafers).
 
 ### 6.4 Results
 
 | Strategy | 250 real | 1,000 | 4,000 | 16,000 |
 |---|---|---|---|---|
-| scratch (real data only) | 57.44% | 69.88% | 76.15% | 77.45% |
-| **fine-tune (synthetic pretrain + real)** | **78.61%** | **78.64%** | **79.37%** | **79.27%** |
+| scratch (real data only) | 31.67 ± 2.54% | 35.22 ± 2.83% | 43.21 ± 3.67% | 60.20 ± 3.13% |
+| **fine-tune (synthetic pretrain + real)** | **72.83 ± 0.82%** | **73.49 ± 0.98%** | **72.90 ± 0.68%** | **73.46 ± 0.28%** |
 
-Reference lines: zero-shot **77.13%**, oracle (all 20,000 real wafers) **76.56%**.
+Reference lines: zero-shot **73.62%**, oracle (all 20,000 real wafers)
+**60.78 ± 4.37%**.
 
 ![sim2real](docs/sim2real.png)
 
-**First, a model combining 250 real wafers with synthetic pretraining outperformed
-a model trained from scratch on 20,000 real wafers** (78.6% > 76.6%). The real-data
-requirement is effectively reduced by a factor of about **80**.
+**First, a model trained on synthetic data substantially outperforms one trained on
+20,000 real wafers.** Fine-tuning with 250 real wafers reaches 72.83 ± 0.82%, while
+the oracle using the entire real pool reaches 60.78 ± 4.37%. **That is a 12-point
+gap, and the two error bars do not overlap.** The real-data requirement is
+effectively reduced by a factor of about **80**.
 
 **Second, the cause of this advantage is not the quantity of data but the diversity
-of process conditions.** All 20,000 real wafers were generated under a **single
-process condition** (one run). However many wafers of one condition a model
-observes, it learns only the distribution near that condition, whereas the twin's
-synthetic data spans **12 conditions**. By analogy, twelve schools' past papers
-cover a broader examination scope than twenty thousand questions from a single
-school. This is consistent with the fact that, in a real fab as well, the
+of process conditions.** Increasing the real data 64-fold, from 250 to 16,000
+wafers, leaves fine-tune performance **flat at 72.8–73.5%**. The real pool is drawn
+entirely from a **single process condition** (one run), so adding more of it gives
+the model nothing new to learn, whereas the twin's synthetic data spans **12
+conditions**. This is consistent with the fact that, in a real fab as well, the
 bottleneck in data collection is **condition coverage** rather than wafer count.
 
-**Third, fine-tune outperforms zero-shot across the entire range by 1.5–2.2
-points.** The loss incurred by the physics mismatch is thus recovered by adapting
-on a small amount of real data.
+**Third, fine-tune does not surpass zero-shot.** Across the whole range it lands
+−0.8 to −0.1 points away, i.e. **no difference within the error bars**. The loss
+caused by the physics mismatch was therefore not recovered by adapting on a small
+amount of real data. This is another facet of the second observation: the data
+available for adaptation is also from a single condition, so there is nothing new
+in it for the model to extract.
 
 Taken together, **the value of synthetic data does not depend on the physical
-completeness of the simulator.** This experiment deliberately set the twin's
-physics differently and still showed that its data replaces most of the real data.
+completeness of the simulator.** A model whose physics was deliberately set wrong
+and which saw no real wafers at all (73.62%) more than doubled the score of a model
+trained on 250 real wafers (31.67%), and beat one trained on 20,000 real wafers
+(60.78%) by 12 points.
 
 ---
 
@@ -461,15 +529,20 @@ physics differently and still showed that its data replaces most of the real dat
 
 ### 7.1 What this project claims
 
-> The value of synthetic data does not derive from physical completeness. It
-> persists even when the simulator disagrees with reality, and the loss caused by
-> that mismatch can be recovered by fine-tuning on a small amount of real data.
+> The value of synthetic data does not derive from physical completeness. A model
+> trained only on data from a simulator whose physics disagrees with reality
+> substantially outperforms one trained on 20,000 real wafers. What creates that
+> gap is not the quantity of data but the diversity of process conditions.
 
 ### 7.2 What this project does not claim
 
 - This experiment does not **validate** synthetic data against real physics. On the
   contrary, it sets the physics **deliberately differently** and examines whether
   usefulness is retained — a **robustness** experiment rather than a validation.
+- **It does not conclude that fine-tuning is useless.** The absence of any gain
+  here is most likely because the data available for adaptation came from a single
+  process condition. With real data spanning several conditions the result could
+  differ.
 - Correcting the simulator itself from real data (back-solving its physics
   constants, i.e. **calibration**) is the opposite direction and a separate
   problem. Which is more efficient — adapting the model to reality, or adapting the
@@ -485,12 +558,17 @@ between the worlds is modeled only as shifts in **coupling constants and noise
 magnitude**, whereas the actual simulator-to-reality gap may take a more structural
 form, such as missing variables or drift over time.
 
+The real-data pool being limited to a **single process condition** is a limitation
+in its own right. Much of the conclusion in Section 6.4 follows from that
+constraint, so an experiment with more conditions is needed.
+
 ### 7.4 Future work
 
 - Validation against measured data (e.g. a public wafer-map dataset)
+- Re-evaluating fine-tuning with **real data spanning several conditions** — the
+  direct follow-up to the limitation noted in Section 7.2
 - A comparison of which is more data-efficient: calibrating the simulator's physics
   constants from a small amount of real data, or fine-tuning the model
-- Reporting metric variance (confidence intervals) from multi-seed training
 - A comparison of a PyTorch reimplementation against the numpy implementation
 
 ---
@@ -501,6 +579,14 @@ form, such as missing variables or drift over time.
 python3 -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+**Generating the data (reproduction).** `graph/` is gitignored, so a fresh clone has
+no data. The following script regenerates, seed for seed, the exact dataset behind
+the numbers in this document.
+
+```bash
+./reproduce.sh                     # 12 twin runs + 3 real-fab runs
 ```
 
 **Full pipeline** (data generation → training → judgment):
@@ -514,9 +600,12 @@ python3 run_all.py --cutoff 0.9    # judge at a recall-first operating point
 **Step by step** (run every command from the repository root):
 
 ```bash
-python3 main.py                  # generate data (each call accumulates 20k wafers under a new condition)
-python3 main.py --real           # generate a "real fab" run (for the Section 6 experiment)
+python3 main.py                  # generate data (random condition; the seed used is recorded)
+python3 main.py --seed 7         # fixed seed - reproduces the condition AND the wafers
+python3 main.py --real --seed 101  # generate a "real fab" run (for the Section 6 experiment)
 python3 ml/dataset.py            # print the status of the accumulated data
+
+python3 tests/test_gradients.py  # verify backprop against numerical differentiation
 
 python3 ml/perceptron.py         # train/evaluate the perceptron (--margins: derived features)
 python3 ml/mlp.py                # train/evaluate the MLP → saves graph/ml/mlp_model.npz
@@ -529,18 +618,22 @@ python3 ml/visualize_boundary.py # decision-boundary visualization
 python3 ml/visualize_metrics.py  # ROC · PR · training-curve · confusion-matrix visualization
 ```
 
-There is no separate test suite or linter; verification consists of running the
-scripts and reading the metrics they print.
+No linter or test framework is used. Verification consists of
+`tests/test_gradients.py` (the numerical correctness of backpropagation) and
+reading the metrics each script prints.
 
 ## Appendix B. Repository structure
 
 ```
 virtual-fab/
-├── main.py                     # simulation entry point
+├── main.py                     # simulation entry point (--seed, --real)
 ├── run_all.py                  # generation → training → judgment, in one command
+├── reproduce.sh                # regenerates this document's dataset from seeds
+├── tests/
+│   └── test_gradients.py       # backprop verification (finite-difference check)
 ├── simulation/                 # the virtual fab (data generation)
 │   ├── config.py               # spec limits, sampling ranges, measurement noise, physics ★source of truth
-│   ├── config_sampler.py       # samples a process condition per run (records the seed)
+│   ├── config_sampler.py       # samples a process condition per run (records the seed, returns the stream)
 │   ├── wafer_generate.py       # generates wafer physical quantities + measurement noise
 │   ├── wafer_analysis.py       # spec judgment → yield
 │   ├── defect_analysis.py      # aggregation by fail cause
@@ -558,7 +651,7 @@ virtual-fab/
 │   ├── sim2real.py             # synthetic-pretrain vs real-data-budget experiment
 │   ├── visualize_boundary.py   # decision-boundary visualization
 │   └── visualize_metrics.py    # ROC · PR · training-curve · confusion-matrix visualization
-└── graph/                      # run artifacts (gitignored, regenerable)
+└── graph/                      # run artifacts (gitignored; regenerate with reproduce.sh)
     ├── run_XXX/                # per-run graphs, run_info.json, wafers.csv.gz
     └── real/run_XXX/           # "real fab" runs (main.py --real)
 ```
@@ -580,6 +673,7 @@ changing the other.
 | **MLP** | A neural network with a hidden layer; can represent closed regions by combining hyperplanes |
 | **Hidden layer** | The intermediate layer between input and output, where the model's expressive power arises |
 | **Backpropagation** | Propagating the output error back through the layers to compute each weight's correction |
+| **Gradient check** | Verifying an implementation by comparing backprop's gradient against a finite-difference derivative of the loss |
 | **He initialization** | Scaling the initial weights to the layer size to prevent the signal vanishing or exploding |
 | **L2 regularization** | Penalizing the magnitude of the weights to curb overfitting |
 | **Sigmoid** | Maps any real number into the interval 0 to 1; used at the output for probabilistic interpretation |
@@ -587,7 +681,7 @@ changing the other.
 | **Class weight** | Counting one class's samples more heavily in the loss. Here, fails count 5× |
 | **Cutoff** | The threshold converting a probability into a verdict: good if `P(good) ≥ cutoff` |
 | **Operating point** | The precision/recall balance determined by the selected cutoff |
-| **Precision / Recall / F1** | See [Section 5.1](#51-choice-of-evaluation-metric) |
+| **Precision / Recall / F1** | See [Section 5.2](#52-choice-of-evaluation-metric) |
 | **ROC AUC** | Discriminative power across all thresholds expressed as a single figure. 0.5 = a random classifier |
 | **Overfitting** | Fitting the training data well while failing to generalize to new data |
 | **Digital twin** | A simulator built to mirror a real system |

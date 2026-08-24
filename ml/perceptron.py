@@ -30,6 +30,10 @@ class Perceptron:
         self.w = rng.normal(0, 0.01, n_features)
         self.b = 0.0
         self.lr = learning_rate
+        # kept so fit() can reshuffle from the same seed: otherwise the
+        # seed would only pick the initial weights and every model would
+        # walk the training set in an identical order.
+        self.seed = seed
 
     # signed distance to the boundary; higher = more "good". Used as a
     # ranking score for ROC/PR (the perceptron has no probability).
@@ -41,7 +45,7 @@ class Perceptron:
 
     def fit(self, X, y, epochs=10):
 
-        rng = np.random.default_rng(0)
+        rng = np.random.default_rng(self.seed)
 
         # --- Pocket algorithm ---
         # On data that is NOT linearly separable, the perceptron never

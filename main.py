@@ -15,13 +15,16 @@ from simulation.correlation_analysis import show_oxide_leakage_scatter, show_oxi
 
 
 def run_simulation(config, seed=None, physics=PHYSICS,
-                   noise=MEASUREMENT_NOISE, base_dir="graph"):
+                   noise=MEASUREMENT_NOISE, base_dir="graph", rng=None):
 
     run_path, time = setup_run(base_dir)
 
     num_wafer = config["num_wafer"]
 
-    Vth, Oxide, Leakage, CD, Temp = make_random_condi(config, physics)
+    # rng carries the run's random stream (from sample_config), so the seed
+    # recorded in run_info.json reproduces the wafers, not just the process
+    # condition. Without it the run is still valid - just not repeatable.
+    Vth, Oxide, Leakage, CD, Temp = make_random_condi(config, physics, rng)
 
     wafer_data = pd.DataFrame({
         "Wafer_ID" : range(1, num_wafer + 1),
@@ -31,8 +34,6 @@ def run_simulation(config, seed=None, physics=PHYSICS,
         "CD[nm]" : CD,
         "Temp[C]" : Temp
     })
-
-    print(wafer_data)
 
     check_yield = wafer_analysis(wafer_data)
     fail_wafer = extract_fail(wafer_data)
@@ -46,7 +47,7 @@ def run_simulation(config, seed=None, physics=PHYSICS,
     # dataset holds what the tester measures (true + sensor noise),
     # because that is all a real fab - or an ML model - ever sees.
     Vth_m, Oxide_m, Leakage_m, CD_m, Temp_m = add_measurement_noise(
-        Vth, Oxide, Leakage, CD, Temp, noise
+        Vth, Oxide, Leakage, CD, Temp, noise, rng
     )
     wafer_data["Vth[V]"] = Vth_m
     wafer_data["Oxide[nm]"] = Oxide_m
@@ -101,14 +102,22 @@ if __name__ == "__main__":
         help="generate with the REAL fab's physics/noise (sim2real "
              "experiment) -> graph/real/run_XXX instead of graph/run_XXX"
     )
+    parser.add_argument(
+        "--seed", type=int, default=None,
+        help="seed for this run. Reproduces the process condition AND the "
+             "wafers generated under it. Omit for a fresh random run (the "
+             "drawn seed is still recorded in run_info.json)."
+    )
     args = parser.parse_args()
 
-    config, seed = sample_config(PROCESS_CONFIG, PARAM_RANGES)
+    config, seed, rng = sample_config(PROCESS_CONFIG, PARAM_RANGES, args.seed)
+
+    print(f"seed : {seed}")
 
     if args.real:
-        run_simulation(config, seed,
+        run_simulation(config, seed, rng=rng,
                        physics=REAL_FAB_PHYSICS,
                        noise=REAL_FAB_NOISE,
                        base_dir="graph/real")
     else:
-        run_simulation(config, seed)
+        run_simulation(config, seed, rng=rng)

@@ -27,7 +27,10 @@ from metrics import binary_metrics
 
 MLP_KW = dict(hidden=(16,), fail_weight=5.0)
 BUDGETS = [250, 1000, 4000, 16000]   # real wafers you can "afford"
-REPEATS = 3                          # average over sampling/init seeds
+REPEATS = 10                         # seeds per budget; reported as mean +- std
+                                     # so the gaps below can be read against
+                                     # the run-to-run spread rather than taken
+                                     # as exact figures
 OUT_PATH = "graph/ml/sim2real.png"
 
 # Okabe-Ito
@@ -96,15 +99,25 @@ if __name__ == "__main__":
           f"(recall {zero_shot['recall'] * 100:.2f}%)")
 
     # ---- upper reference: all 20k real wafers, from scratch ---------
-    oracle_model, om, os_ = train_scratch(X_pool, y_pool, seed=0)
-    oracle = f1_on(oracle_model, X_test, y_test, om, os_)
-    print(f"oracle (all {len(X_pool)} real) : F1 {oracle['f1'] * 100:.2f}%")
+    # Repeated over seeds like the budget sweep below: the headline claim
+    # ("a little real data + synthetic pretraining beats the full real
+    # pool") is a comparison against THIS number, so it needs a spread to
+    # be read against, not a single draw.
+    oracle_scores = []
+    for rep in range(REPEATS):
+        m, om, os_ = train_scratch(X_pool, y_pool, seed=rep)
+        oracle_scores.append(f1_on(m, X_test, y_test, om, os_)["f1"])
+    oracle_mean = float(np.mean(oracle_scores))
+    oracle_sd = float(np.std(oracle_scores, ddof=1))
+    print(f"oracle (all {len(X_pool)} real) : F1 {oracle_mean * 100:.2f} "
+          f"+- {oracle_sd * 100:.2f}%")
     print()
 
     # ---- budget sweep ------------------------------------------------
     scratch_f1, finetune_f1 = [], []
+    scratch_sd, finetune_sd = [], []
 
-    print(f"{'real wafers':>12} | {'scratch F1':>10} | {'fine-tune F1':>12}")
+    print(f"{'real wafers':>12} | {'scratch F1':>16} | {'fine-tune F1':>16}")
     for n in BUDGETS:
         s_scores, f_scores = [], []
         for rep in range(REPEATS):
@@ -120,30 +133,37 @@ if __name__ == "__main__":
 
         scratch_f1.append(np.mean(s_scores))
         finetune_f1.append(np.mean(f_scores))
-        print(f"{n:>12} | {scratch_f1[-1] * 100:9.2f}% "
-              f"| {finetune_f1[-1] * 100:11.2f}%")
+        scratch_sd.append(np.std(s_scores, ddof=1))
+        finetune_sd.append(np.std(f_scores, ddof=1))
+        print(f"{n:>12} | {scratch_f1[-1] * 100:7.2f} +- {scratch_sd[-1] * 100:4.2f}% "
+              f"| {finetune_f1[-1] * 100:7.2f} +- {finetune_sd[-1] * 100:4.2f}%")
 
     # ---- figure ------------------------------------------------------
     fig, ax = plt.subplots(figsize=(8, 5.5))
 
-    ax.plot(BUDGETS, np.array(scratch_f1) * 100, "o-",
-            color=SCRATCH_COLOR, lw=2,
-            label="scratch (real data only)")
-    ax.plot(BUDGETS, np.array(finetune_f1) * 100, "o-",
-            color=FINETUNE_COLOR, lw=2,
-            label="fine-tuned (synthetic pretrain + real)")
+    ax.errorbar(BUDGETS, np.array(scratch_f1) * 100,
+                yerr=np.array(scratch_sd) * 100, fmt="o-", capsize=4,
+                color=SCRATCH_COLOR, lw=2,
+                label="scratch (real data only)")
+    ax.errorbar(BUDGETS, np.array(finetune_f1) * 100,
+                yerr=np.array(finetune_sd) * 100, fmt="o-", capsize=4,
+                color=FINETUNE_COLOR, lw=2,
+                label="fine-tuned (synthetic pretrain + real)")
     ax.axhline(zero_shot["f1"] * 100, ls="--", color=ZEROSHOT_COLOR,
                lw=1.5, label="zero-shot (synthetic only)")
-    ax.axhline(oracle["f1"] * 100, ls=":", color=ORACLE_COLOR,
+    ax.axhline(oracle_mean * 100, ls=":", color=ORACLE_COLOR,
                lw=1.5, label=f"oracle (all {len(X_pool):,} real wafers)")
+    ax.axhspan((oracle_mean - oracle_sd) * 100,
+               (oracle_mean + oracle_sd) * 100,
+               color=ORACLE_COLOR, alpha=0.15, lw=0)
 
     ax.set_xscale("log")
     ax.set_xticks(BUDGETS, [f"{n:,}" for n in BUDGETS])
     ax.set_xlabel("Real wafers available for training")
     ax.set_ylabel("F1 on held-out real runs (fail class, %)")
     ax.set_title("sim2real: synthetic pretraining vs real-data budget\n"
-                 f"(mean of {REPEATS} seeds; real fab has shifted physics "
-                 "+ noisier testers)")
+                 f"(mean +- sd over {REPEATS} seeds; real fab has shifted "
+                 "physics + noisier testers)")
     ax.legend(loc="lower right", fontsize=9)
 
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)

@@ -6,11 +6,16 @@ from simulation.config import PHYSICS
 # physics selects which coupling constants the "world" obeys - the
 # digital twin uses the default PHYSICS, the real fab (sim2real
 # experiment) passes REAL_FAB_PHYSICS.
-def make_random_condi(config, physics=PHYSICS):
+# rng: the run's random stream (see config_sampler.sample_config). Passing
+# one in makes the run reproducible from its recorded seed; omitting it
+# falls back to a fresh unseeded stream.
+def make_random_condi(config, physics=PHYSICS, rng=None):
+
+    rng = np.random.default_rng() if rng is None else rng
 
     num_wafer = config["num_wafer"]
 
-    Oxide = np.random.normal(
+    Oxide = rng.normal(
         loc=config["Oxide"]["mean"],
         scale=config["Oxide"]["std"],
         size=num_wafer
@@ -19,19 +24,19 @@ def make_random_condi(config, physics=PHYSICS):
     # CD (gate critical dimension) and process temperature are drawn
     # independently; the couplings below inject their physical effect
     # into Vth / Leakage, the same way Oxide already does.
-    CD = np.random.normal(
+    CD = rng.normal(
         loc=config["CD"]["mean"],
         scale=config["CD"]["std"],
         size=num_wafer
     )
 
-    Temp = np.random.normal(
+    Temp = rng.normal(
         loc=config["Temp"]["mean"],
         scale=config["Temp"]["std"],
         size=num_wafer
     )
 
-    Base_Vth = np.random.normal(
+    Base_Vth = rng.normal(
         loc=config["Vth"]["mean"],
         scale=config["Vth"]["std"],
         size=num_wafer
@@ -45,7 +50,7 @@ def make_random_condi(config, physics=PHYSICS):
     )
 
 
-    Base_Leakage = np.random.lognormal(
+    Base_Leakage = rng.lognormal(
         mean=config["Leakage"]["mean"],
         sigma=config["Leakage"]["sigma"],
         size=num_wafer
@@ -64,15 +69,19 @@ def make_random_condi(config, physics=PHYSICS):
 
 # What the tester reports: true value + sensor noise.
 # Leakage noise is multiplicative (lognormal) so it stays positive.
-def add_measurement_noise(Vth, Oxide, Leakage, CD, Temp, noise):
+# rng: same run stream as make_random_condi, so the measurements are part
+# of what the run's seed reproduces.
+def add_measurement_noise(Vth, Oxide, Leakage, CD, Temp, noise, rng=None):
+
+    rng = np.random.default_rng() if rng is None else rng
 
     n = len(Vth)
 
-    Vth_measured = Vth + np.random.normal(0, noise["Vth"], n)
-    Oxide_measured = Oxide + np.random.normal(0, noise["Oxide"], n)
-    Leakage_measured = Leakage * np.random.lognormal(0, noise["Leakage"], n)
-    CD_measured = CD + np.random.normal(0, noise["CD"], n)
-    Temp_measured = Temp + np.random.normal(0, noise["Temp"], n)
+    Vth_measured = Vth + rng.normal(0, noise["Vth"], n)
+    Oxide_measured = Oxide + rng.normal(0, noise["Oxide"], n)
+    Leakage_measured = Leakage * rng.lognormal(0, noise["Leakage"], n)
+    CD_measured = CD + rng.normal(0, noise["CD"], n)
+    Temp_measured = Temp + rng.normal(0, noise["Temp"], n)
 
     return Vth_measured, Oxide_measured, Leakage_measured, CD_measured, Temp_measured
 
