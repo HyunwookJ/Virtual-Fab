@@ -15,3 +15,6 @@ graph/
 
 # macOS
 .DS_Store
+
+# understanding text
+understanding.md
