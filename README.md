@@ -528,9 +528,12 @@ Reference lines: zero-shot **73.62%**, oracle (all 20,000 real wafers)
 
 **First, a model that saw no real wafers at all outperforms one trained on 20,000
 of them.** Zero-shot reaches 73.62% while the oracle using the entire real pool
-reaches 60.78 ± 4.37% — **a 12.8-point gap, with no overlap between the error
-bars.** Fine-tuning with 250 real wafers (72.83 ± 0.82%) gives the same verdict.
-The contribution of real data in this comparison is therefore zero, and the
+reaches 60.78 ± 4.37% — **a 12.8-point gap**. Zero-shot is a single value from one
+pretrained model, so its spread was not measured; even doubling the oracle's
+standard deviation (±8.74 points), however, leaves the gap intact. For a comparison
+where both sides carry a spread, fine-tuning with 250 real wafers
+(72.83 ± 0.82%) against the oracle (60.78 ± 4.37%) gives **error bars that do not
+overlap.** Either way the contribution of real data here is zero, and the
 substitution should be read as **20,000 wafers → 0**, not 20,000 → 250.
 
 **Second, the cause of this advantage is not the quantity of data but the diversity
