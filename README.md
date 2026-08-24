@@ -458,11 +458,41 @@ To address this, a second world was defined to play the role of a "real fab."
 
 | Item | Digital twin (virtual fab) | Real fab |
 |---|---|---|
-| Physics constants | `PHYSICS` | `REAL_FAB_PHYSICS` — **different** (e.g. oxide→Vth coupling 0.010 vs 0.013) |
-| Measurement noise | `MEASUREMENT_NOISE` | `REAL_FAB_NOISE` — approximately **40% larger** (real testers are less precise) |
+| Physics constants | `PHYSICS` | `REAL_FAB_PHYSICS` — **different** (table below) |
+| Measurement noise | `MEASUREMENT_NOISE` | `REAL_FAB_NOISE` — **mostly larger** (table below) |
 | Spec limits | shared | shared (product requirements, identical across both worlds) |
 | Cost of data | free, 12 process conditions | expensive, budget-limited (a single condition) |
 | Location | `graph/run_*` | `graph/real/run_*` (`main.py --real`) |
+
+**How large is the mismatch?** The two worlds were configured as follows.
+
+Physical coupling constants:
+
+| Coupling | Twin | Real fab | Difference |
+|---|---|---|---|
+| `vth_oxide` (oxide → Vth) | 0.010 | 0.013 | +30% |
+| `vth_cd` (CD → Vth) | 0.004 | 0.006 | +50% |
+| `leak_oxide` (oxide → leakage) | −0.30 | −0.36 | +20% |
+| `leak_cd` (CD → leakage) | −0.05 | −0.03 | **−40%** |
+| `leak_temp` (temperature → leakage) | 0.03 | 0.05 | **+67%** |
+
+Measurement noise:
+
+| Parameter | Twin | Real fab | Difference |
+|---|---|---|---|
+| Vth [V] | 0.005 | 0.007 | +40% |
+| Oxide [nm] | 0.5 | 0.7 | +40% |
+| Leakage (lognormal σ) | 0.10 | 0.14 | +40% |
+| CD [nm] | 0.3 | 0.42 | +40% |
+| Temp [C] | 0.4 | 0.3 | **−25%** |
+
+The coupling constants are therefore off by 20–67%, and the measurement noise is
+40% larger everywhere except temperature. Note, however, that this is a mismatch
+**in the magnitude of the constants only: the functional form and the set of
+variables are identical** — a parametric mismatch. The gap between a real
+simulator and reality may instead be **structural**, with variables missing
+altogether or the physical model taking a different form, and that case is
+outside what this experiment tests ([Section 7.3](#73-limitations)).
 
 Notably, **the twin has no knowledge of this difference**. The synthetic data here
 is not merely "data containing noise" but **a systematically biased distribution
