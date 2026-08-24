@@ -526,11 +526,12 @@ Reference lines: zero-shot **73.62%**, oracle (all 20,000 real wafers)
 
 ![sim2real](docs/sim2real.png)
 
-**First, a model trained on synthetic data substantially outperforms one trained on
-20,000 real wafers.** Fine-tuning with 250 real wafers reaches 72.83 ± 0.82%, while
-the oracle using the entire real pool reaches 60.78 ± 4.37%. **That is a 12-point
-gap, and the two error bars do not overlap.** The real-data requirement is
-effectively reduced by a factor of about **80**.
+**First, a model that saw no real wafers at all outperforms one trained on 20,000
+of them.** Zero-shot reaches 73.62% while the oracle using the entire real pool
+reaches 60.78 ± 4.37% — **a 12.8-point gap, with no overlap between the error
+bars.** Fine-tuning with 250 real wafers (72.83 ± 0.82%) gives the same verdict.
+The contribution of real data in this comparison is therefore zero, and the
+substitution should be read as **20,000 wafers → 0**, not 20,000 → 250.
 
 **Second, the cause of this advantage is not the quantity of data but the diversity
 of process conditions.** Increasing the real data 64-fold, from 250 to 16,000
@@ -547,8 +548,8 @@ amount of real data. This is another facet of the second observation: the data
 available for adaptation is also from a single condition, so there is nothing new
 in it for the model to extract.
 
-Taken together, **the value of synthetic data does not depend on the physical
-completeness of the simulator.** A model whose physics was deliberately set wrong
+Taken together, **a simulator does not have to be physically accurate for its data
+to be valuable.** A model whose physics was deliberately set wrong
 and which saw no real wafers at all (73.62%) more than doubled the score of a model
 trained on 250 real wafers (31.67%), and beat one trained on 20,000 real wafers
 (60.78%) by 12 points.
@@ -559,10 +560,15 @@ trained on 250 real wafers (31.67%), and beat one trained on 20,000 real wafers
 
 ### 7.1 What this project claims
 
-> The value of synthetic data does not derive from physical completeness. A model
-> trained only on data from a simulator whose physics disagrees with reality
-> substantially outperforms one trained on 20,000 real wafers. What creates that
-> gap is not the quantity of data but the diversity of process conditions.
+> A simulator does not have to be physically accurate for its data to be valuable.
+> A model trained only on data from a simulator whose coupling constants are off by
+> 20–67% outperforms one trained on 20,000 real wafers by 12.8 points. What creates
+> that gap is not the quantity of data but the diversity of process conditions.
+
+This does not mean physical accuracy is **irrelevant**. Only one level of mismatch
+was tested, so the supportable statement is that **a parametric mismatch of 20–67%
+cost less than the coverage advantage was worth**. Where a larger mismatch would
+reverse that trade was not measured.
 
 ### 7.2 What this project does not claim
 
