@@ -96,7 +96,9 @@ if __name__ == "__main__":
 
     print()
     print("training MLP ...")
-    mlp = MLP(n_features=n_features)
+    # same fail_weight as ml/mlp.py's default, so the plotted model is
+    # the one whose metrics are reported
+    mlp = MLP(n_features=n_features, fail_weight=5.0)
     mlp.fit(X_train_std, y_train, epochs=30)
 
     # slice the feature space at the median of every non-plotted feature

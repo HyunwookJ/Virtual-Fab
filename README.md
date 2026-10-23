@@ -349,8 +349,12 @@ representative and nothing more — in contrast to the MLP's ±1.77 points.
 The figure above projects the decision boundary onto the Vth–Oxide plane (the
 remaining three parameters fixed at their medians). The perceptron merely
 **partitions the plane along a diagonal**, so every fail on one side is labeled
-good, whereas the MLP has learned a **closed region** close to the actual spec box
-(dashed line).
+good, whereas the MLP follows **both the lower and upper Vth edges** of the spec
+(dashed line), the "only the middle band is good" rule a perceptron cannot express.
+Along Oxide the region does not close within the plotted range: only 1.67% of
+training wafers fall outside the Oxide spec, versus 16.36% for Vth, so there is
+little evidence for the model to learn that edge from. Both models in the figure
+are trained with the same settings as the table above.
 
 ### 5.4 The decision cutoff and the operating point
 
