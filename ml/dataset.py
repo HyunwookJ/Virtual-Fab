@@ -32,7 +32,7 @@ def load_all_runs(graph_dir="graph"):
 
 
 # Return (X, y) ready for model training:
-#   X = per-wafer features [Vth, Oxide, Leakage]
+#   X = per-wafer features [Vth, Oxide, Leakage, CD, Temp]
 #   y = pass/fail label (1 = good, 0 = fail)
 def load_dataset(graph_dir="graph"):
 
@@ -74,6 +74,13 @@ def load_train_test_by_run(test_fraction=0.2, graph_dir="graph", seed=42):
     data = load_all_runs(graph_dir)
 
     runs = sorted(data["Run"].unique())
+
+    # at least one run must stay on each side, or training gets no data
+    if len(runs) < 2:
+        raise ValueError(
+            f"Need at least 2 runs under '{graph_dir}/' for a run-based "
+            f"split (found {len(runs)}). Run main.py again to add one."
+        )
 
     rng = np.random.default_rng(seed)
     rng.shuffle(runs)

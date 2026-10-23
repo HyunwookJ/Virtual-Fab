@@ -22,8 +22,10 @@ def run(cmd, quiet=False):
     subprocess.run(cmd, stdout=stdout, check=True)
 
 
+# sort by run number, not by string: "run_1000" < "run_999" as text
 def latest_run():
-    runs = sorted(glob.glob("graph/run_*"))
+    runs = sorted(glob.glob("graph/run_*"),
+                  key=lambda p: int(os.path.basename(p).split("_")[1]))
     return os.path.basename(runs[-1]) if runs else None
 
 

@@ -302,6 +302,13 @@ significant. Fail detection at cutoff 0.9, by contrast, barely moves (±0.58
 points), meaning the model behaves stably once the operating point is set to favor
 recall.
 
+The figures at cutoff 0.5 are more sensitive to **which runs are trained on** than
+to the seed: holding out any one of the 10 training runs moves test F1 across
+66.73 – 77.86% (72.14 ± 3.22%), so the 78.08% reported below sits at the favorable
+end. The model's discriminative power is unchanged, however — re-choosing the cutoff
+on the held-out run restores test F1 to 78.78 ± 0.99%. What shifts is the operating
+point, not the model's ability to separate fails from good wafers.
+
 ### 5.2 Choice of evaluation metric
 
 On this data, **labeling every wafer as good already yields 74.23% accuracy**,
@@ -330,11 +337,12 @@ indistinguishable from the "label everything good" baseline of 74.23% — traini
 bought it almost nothing. This matches the prediction made in
 [Section 4.2](#42-the-structural-limitation-of-the-single-layer-perceptron).
 
-The perceptron also varies widely with the seed (F1 16.95 ± 3.00%, range
-13.85 – 21.23%), because a model that oscillates instead of converging leaves the
-pocket selecting a different boundary each time. With a standard deviation of 18%
-of the mean, the single figure in the table (which sits at the bottom of that
-range) is representative and nothing more — in contrast to the MLP's ±1.77 points.
+The perceptron also varies widely with the seed (F1 11.65 ± 7.29% across the
+same 10 seeds, range 0.39 – 21.23%), because a model that oscillates instead of
+converging leaves the pocket selecting a different boundary each time. With a
+standard deviation of 63% of the mean — and some seeds catching almost no fails at
+all — the single figure in the table (which sits slightly above that mean) is
+representative and nothing more — in contrast to the MLP's ±1.77 points.
 
 ![decision boundary](docs/decision_boundary.png)
 

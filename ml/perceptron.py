@@ -4,8 +4,8 @@ from dataset import load_train_test_by_run, FEATURE_COLUMNS
 from metrics import print_evaluation as evaluate
 
 
-# Features have very different scales (Vth ~0.7, Oxide ~100, Leakage ~1-10),
-# so standardize each to mean 0 / std 1 before training.
+# Features have very different scales (Vth ~0.7, Oxide ~100, Leakage ~1-10,
+# CD ~45, Temp ~25), so standardize each to mean 0 / std 1 before training.
 # Test data must reuse the training set's mean/std.
 def standardize(X, mean=None, std=None):
 
