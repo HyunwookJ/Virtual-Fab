@@ -45,7 +45,7 @@ def make_random_condi(config, physics=PHYSICS, rng=None):
     # thicker oxide raises Vth; smaller CD (shorter channel) lowers it
     Vth = (
         Base_Vth
-        + physics["vth_oxide"] * (Oxide - 100)
+        + physics["vth_oxide"] * (Oxide - 1.2)
         + physics["vth_cd"] * (CD - 45)
     )
 
@@ -59,7 +59,7 @@ def make_random_condi(config, physics=PHYSICS, rng=None):
     # thinner oxide, smaller CD, and higher temperature all leak more
     Leakage = (
         Base_Leakage
-        * np.exp(physics["leak_oxide"] * (Oxide - 100))
+        * np.exp(physics["leak_oxide"] * (Oxide - 1.2))
         * np.exp(physics["leak_cd"] * (CD - 45))
         * np.exp(physics["leak_temp"] * (Temp - 25))
     )

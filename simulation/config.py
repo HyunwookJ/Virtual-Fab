@@ -11,10 +11,10 @@ PROCESS_CONFIG = {
     },
 
     "Oxide": {
-        "mean": 100,
-        "std": 0.8,
-        "spec_min": 97,
-        "spec_max": 103
+        "mean": 1.2,
+        "std": 0.0096,
+        "spec_min": 1.164,
+        "spec_max": 1.236
     },
 
     "Leakage": {
@@ -42,9 +42,9 @@ PROCESS_CONFIG = {
 # Physical couplings used by wafer_generate.py: how strongly one true
 # quantity drags another. These ARE the simulator's physics.
 PHYSICS = {
-    "vth_oxide": 0.01,    # dVth per nm of oxide above 100
+    "vth_oxide": 0.01 / 0.012,   # ~0.833 dVth [V] per nm of oxide above 1.2
     "vth_cd": 0.004,      # dVth per nm of CD above 45
-    "leak_oxide": -0.3,   # log-leakage slope vs oxide
+    "leak_oxide": -0.3 / 0.012,  # -25 log-leakage slope per nm of oxide
     "leak_cd": -0.05,     # log-leakage slope vs CD
     "leak_temp": 0.03     # log-leakage slope vs temperature
 }
@@ -58,16 +58,16 @@ PHYSICS = {
 # gap that ml/sim2real.py measures. Spec limits stay identical: they
 # are product requirements, not physics.
 REAL_FAB_PHYSICS = {
-    "vth_oxide": 0.013,
+    "vth_oxide": 0.013 / 0.012,  # ~1.083
     "vth_cd": 0.006,
-    "leak_oxide": -0.36,
+    "leak_oxide": -0.36 / 0.012,  # -30
     "leak_cd": -0.03,
     "leak_temp": 0.05
 }
 
 REAL_FAB_NOISE = {
     "Vth": 0.007,
-    "Oxide": 0.7,
+    "Oxide": 0.0084,
     "Leakage": 0.14,
     "CD": 0.42,
     "Temp": 0.3
@@ -82,7 +82,7 @@ REAL_FAB_NOISE = {
 # problem realistic instead of "rediscovering a known rule".
 MEASUREMENT_NOISE = {
     "Vth": 0.005,     # additive gaussian std [V]
-    "Oxide": 0.5,     # additive gaussian std [nm]
+    "Oxide": 0.006,   # additive gaussian std [nm]
     "Leakage": 0.10,  # multiplicative lognormal sigma
     "CD": 0.3,        # additive gaussian std [nm]
     "Temp": 0.4       # additive gaussian std [C]
@@ -101,8 +101,8 @@ PARAM_RANGES = {
     },
 
     "Oxide": {
-        "mean": (98.5, 101.5),
-        "std":  (0.6, 1.5)
+        "mean": (1.182, 1.218),
+        "std":  (0.0072, 0.018)
     },
 
     "Leakage": {

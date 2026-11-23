@@ -30,7 +30,7 @@ FAIL_COLOR = "#E69F00"
 def plot_decision_region(ax, model, mean, std, background, title):
 
     vth = np.linspace(0.63, 0.77, 400)
-    oxide = np.linspace(95, 105, 400)
+    oxide = np.linspace(1.14, 1.26, 400)
     VV, OO = np.meshgrid(vth, oxide)
 
     grid = np.tile(background, (VV.size, 1))

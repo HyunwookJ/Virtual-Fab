@@ -103,7 +103,7 @@ represented by five values.
 | Parameter | Meaning | Spec range |
 |---|---|---|
 | `Vth[V]` | Threshold voltage — the voltage at which the transistor begins to turn on | 0.67 – 0.73 |
-| `Oxide[nm]` | Gate oxide thickness | 97 – 103 |
+| `Oxide[nm]` | Gate oxide thickness | 1.164 – 1.236 |
 | `Leakage[nA]` | Leakage current — current flowing while the device is off | ≤ 10 (upper limit only) |
 | `CD[nm]` | Gate critical dimension | 43.5 – 46.5 |
 | `Temp[C]` | Process temperature | 23 – 27 |
@@ -425,8 +425,7 @@ solves. The results are as follows.
 
 The perceptron's F1 rises from 13.85% to 59.05%, more than a fourfold improvement:
 a problem it could not solve structurally becomes one it handles usably. It still
-falls short of the MLP (78.08%), because `MinMargin` linearizes the rule completely
-only for **true** values, while in practice it is computed from noisy measurements.
+falls short of the MLP (78.08%).
 
 Inspecting the learned weights shows the perceptron assigning the largest weight
 (**+0.1564**) to `MinMargin` on its own — four times the runner-up, `Leakage`
@@ -482,9 +481,9 @@ Physical coupling constants:
 
 | Coupling | Twin | Real fab | Difference |
 |---|---|---|---|
-| `vth_oxide` (oxide → Vth) | 0.010 | 0.013 | +30% |
+| `vth_oxide` (oxide → Vth) | 0.833 | 1.083 | +30% |
 | `vth_cd` (CD → Vth) | 0.004 | 0.006 | +50% |
-| `leak_oxide` (oxide → leakage) | −0.30 | −0.36 | +20% |
+| `leak_oxide` (oxide → leakage) | −25 | −30 | +20% |
 | `leak_cd` (CD → leakage) | −0.05 | −0.03 | **−40%** |
 | `leak_temp` (temperature → leakage) | 0.03 | 0.05 | **+67%** |
 
@@ -493,7 +492,7 @@ Measurement noise:
 | Parameter | Twin | Real fab | Difference |
 |---|---|---|---|
 | Vth [V] | 0.005 | 0.007 | +40% |
-| Oxide [nm] | 0.5 | 0.7 | +40% |
+| Oxide [nm] | 0.006 | 0.0084 | +40% |
 | Leakage (lognormal σ) | 0.10 | 0.14 | +40% |
 | CD [nm] | 0.3 | 0.42 | +40% |
 | Temp [C] | 0.4 | 0.3 | **−25%** |
